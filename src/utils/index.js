@@ -1,0 +1,1 @@
+export const createPageUrl = (path) => path.startsWith('/') ? path : `/${path}`;
