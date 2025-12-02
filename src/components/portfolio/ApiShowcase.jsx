@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Code2, Github, Cloud, Activity, Globe, RefreshCw, Zap, 
-  Satellite, UserSearch, MessageSquare, Dog, MapPin, Database
+  Satellite, User, MessageSquare, Dog, MapPin, Database
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,7 +100,7 @@ function IdentityOracle() {
   return (
     <div className="flex flex-col h-full">
       <h4 className="text-slate-200 font-semibold flex items-center gap-2 mb-4">
-        <UserSearch className="w-5 h-5 text-purple-400" /> Identity Oracle
+        <User className="w-5 h-5 text-purple-400" /> Identity Oracle
       </h4>
       <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700 flex-1">
         <div className="flex gap-2 mb-4">
