@@ -16,9 +16,12 @@ export default function GlobalTracker() {
     fetch('/api/whoami').then(r => r.json()).then(data => {
       setIpInfo(data);
       
-      // Check if ALREADY banned
-      supabase.from('banned_ips').select('*').eq('ip', data.ip).single()
-        .then(({ data: banData }) => { if (banData) setBanned(true); });
+      // FIX: Use .maybeSingle() instead of .single()
+      // This prevents the 406 Error when the IP is NOT banned
+      supabase.from('banned_ips').select('*').eq('ip', data.ip).maybeSingle()
+        .then(({ data: banData }) => { 
+          if (banData) setBanned(true); 
+        });
     });
 
     // 2. Realtime System Listener
