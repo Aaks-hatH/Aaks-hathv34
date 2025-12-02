@@ -62,20 +62,46 @@ export default function Admin() {
   };
 
   // 4. TOGGLE LOCKDOWN
-  const toggleMaintenance = async () => {
-    const newState = !maintenance;
-    setMaintenance(newState);
-    await supabase.from('system_config').upsert({ 
-      key: 'maintenance_mode', 
-      value: String(newState) 
-    });
-  };
+ const toggleMaintenance = async () => {
+    try {
+      const newState = !maintenance;
+      
+      // Call Secure Backend
+      const res = await fetch('/api/toggle-lockdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, status: newState }) // Send pwd for auth
+      });
 
-  // 5. DELETE MESSAGE
+      if (res.ok) {
+        setMaintenance(newState);
+      } else {
+        alert("ACCESS DENIED: Server rejected lockdown command.");
+      }
+    } catch (e) {
+      alert("Network Error");
+    }
+  };
+  
   const handleDelete = async (id) => {
     if(!confirm("CONFIRM_DELETION?")) return;
-    await base44.entities.GuestbookMessage.delete(id);
-    fetchMessages();
+    
+    try {
+      // Call Secure Backend
+      const res = await fetch('/api/delete-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, id })
+      });
+
+      if (res.ok) {
+        fetchMessages();
+      } else {
+        alert("ACCESS DENIED: Server rejected delete command.");
+      }
+    } catch (e) {
+      alert("Network Error");
+    }
   };
 
   if (!auth) {
