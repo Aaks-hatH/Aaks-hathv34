@@ -88,14 +88,17 @@ export default function Admin() {
   };
 
   const executeCommand = async (payload) => {
+    // FIX: Append timestamp to force a DB change event every time
+    const uniquePayload = `${payload}|${Date.now()}`; 
+    
     await fetch('/api/toggle-lockdown', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, key: 'system_command', value: payload })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, key: 'system_command', value: uniquePayload })
     });
     setCmd('');
-    alert(`Command Executed: ${payload}`);
+    // alert(`Command Executed: ${payload}`); // Optional: Remove annoying alert
   };
-
   const banUser = async (ip) => {
     if(!confirm(`BAN IP: ${ip}?`)) return;
     await fetch('/api/ban-target', {
