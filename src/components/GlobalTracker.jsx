@@ -8,119 +8,110 @@ export default function GlobalTracker() {
   const [locked, setLocked] = useState(false);
   const [banned, setBanned] = useState(false);
   const [broadcast, setBroadcast] = useState('');
-  // Default to 'Unknown' so it doesn't get stuck on 'Loading...'
-  const [ipInfo, setIpInfo] = useState({ ip: 'Unknown', geo: 'Earth' }); 
-  const [guestId] = useState(`GUEST-${Math.floor(Math.random() * 10000)}`);
+  // Default to basic info so it doesn't crash
+  const [ipInfo, setIpInfo] = useState({ ip: 'Identifying...', geo: 'Unknown' });
+  const [guestId] = useState(`GUEST-${Math.floor(Math.random() * 100000)}`);
 
+  // 1. IDENTITY CHECK (Robust)
   useEffect(() => {
-    // 1. IDENTIFY (With Fallback)
-    fetch('/api/whoami')
-      .then(r => {
-        if (r.ok) return r.json();
-        throw new Error("Whoami failed");
-      })
-      .then(data => {
+    const getIdentity = async () => {
+      try {
+        const res = await fetch('/api/whoami');
+        if (!res.ok) throw new Error("Backend Missing");
+        const data = await res.json();
         setIpInfo(data);
+        
         // Check Ban Status
-        checkBan(data.ip);
-      })
-      .catch(() => {
-        // Fallback if API blocked
-        console.log("Identity cloaked or API blocked");
-        setIpInfo({ ip: '127.0.0.1', geo: 'Hidden' });
-      });
+        const { data: banData } = await supabase
+          .from('banned_ips')
+          .select('*')
+          .eq('ip', data.ip)
+          .maybeSingle();
+          
+        if (banData) setBanned(true);
+      } catch (e) {
+        console.warn("Whoami failed (using fallback):", e);
+        setIpInfo({ ip: '127.0.0.1', geo: 'Hidden (API Fail)' });
+      }
+    };
+    getIdentity();
+  }, []);
 
-    // 2. LISTEN FOR COMMANDS
-    const sysSub = supabase.channel('system-events')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'system_config' }, (payload) => {
-        
+  // 2. REALTIME COMMAND CENTER
+  useEffect(() => {
+    console.log("🔌 Connecting to System Channels...");
+    
+    const channel = supabase.channel('system-events')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, (payload) => {
+        console.log("⚡ SIGNAL RECEIVED:", payload);
         const { key, value } = payload.new;
-        
-        // Lockdown
-        if (key === 'maintenance_mode') setLocked(value === 'true');
 
-        // Broadcasts
+        if (key === 'maintenance_mode') setLocked(value === 'true');
+        
         if (key === 'system_broadcast') {
             setBroadcast(value);
             setTimeout(() => setBroadcast(''), 10000);
         }
 
-        // Remote Execution
         if (key === 'system_command') {
-            // FIX: Split the timestamp out (RICKROLL|1234 -> RICKROLL)
-            const cleanCommand = value.split('|')[0];
-            
-            console.log("CMD:", cleanCommand); // Debugging
-            
-            if (cleanCommand === 'RICKROLL') {
-                window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-            }
-            if (cleanCommand === 'RELOAD') {
-                window.location.reload();
-            }
-            if (cleanCommand.startsWith('ALERT:')) {
-                alert(cleanCommand.split('ALERT:')[1]);
-            }
+            const cmd = value.split('|')[0]; // Remove timestamp
+            if (cmd === 'RICKROLL') window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+            if (cmd === 'RELOAD') window.location.reload();
+            if (cmd.startsWith('ALERT:')) alert(cmd.split('ALERT:')[1]);
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'banned_ips' }, (payload) => {
         if (payload.new.ip === ipInfo.ip) setBanned(true);
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'banned_ips' }, (payload) => {
-        if (payload.old.ip === ipInfo.ip) setBanned(false);
-      })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("System Status:", status);
+      });
 
-    return () => { supabase.removeChannel(sysSub); };
-  }, [ipInfo.ip]); // Re-run listener if IP changes
+    return () => { supabase.removeChannel(channel); };
+  }, [ipInfo.ip]);
 
-  // Helper to check ban status
-  const checkBan = async (ip) => {
-      const { data } = await supabase.from('banned_ips').select('*').eq('ip', ip).maybeSingle();
-      if (data) setBanned(true);
-  };
-
-  // 3. SPY BROADCAST
+  // 3. SPY BROADCAST (Presence)
   useEffect(() => {
-     if(ipInfo.ip === 'Loading...') return; // Wait for ID
+    const channel = supabase.channel('online-users', {
+      config: { presence: { key: guestId } }
+    });
 
-     const channel = supabase.channel('online-users', { config: { presence: { key: guestId } } });
-     
-     channel.subscribe(status => {
-         if(status === 'SUBSCRIBED') {
-             channel.track({ 
-                 id: guestId, 
-                 path: location.pathname, 
-                 ua: navigator.userAgent, 
-                 ip: ipInfo.ip, 
-                 geo: ipInfo.geo, 
-                 timestamp: new Date().toISOString() 
-             });
-         }
-     });
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log("📡 Broadcasting Location...");
+        await channel.track({
+          id: guestId,
+          path: location.pathname,
+          ua: navigator.userAgent,
+          ip: ipInfo.ip,
+          geo: ipInfo.geo,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
 
-     return () => { supabase.removeChannel(channel); };
+    return () => { supabase.removeChannel(channel); };
   }, [location, guestId, ipInfo]);
 
-  // --- VISUALS ---
+  // --- UI ---
   if (banned) {
     return (
       <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center text-red-600 font-mono p-4">
          <div className="text-center border border-red-900 p-10 bg-red-950/20">
             <Ban className="w-20 h-20 mx-auto mb-4" />
             <h1 className="text-3xl font-bold">CONNECTION TERMINATED</h1>
-            <p className="mt-2 text-sm text-red-400">IP ADDRESS BLACKLISTED.</p>
+            <p className="mt-2 text-sm text-red-400">BLACKLISTED TARGET.</p>
             <p className="text-xs text-slate-600 mt-4 font-mono">{ipInfo.ip}</p>
          </div>
       </div>
     );
   }
-  
+
   if (locked && !location.pathname.includes('/admin')) {
     return (
-        <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center text-red-600 font-bold text-2xl">
-            SYSTEM LOCKDOWN
-        </div>
+      <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center text-red-600 font-bold text-2xl">
+        SYSTEM LOCKDOWN ACTIVE
+      </div>
     );
   }
 
