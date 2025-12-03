@@ -97,8 +97,8 @@ export default function GlobalTracker() {
     return (
       <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center text-red-600 font-mono p-4">
         <ShieldAlert className="w-24 h-24 mb-4 animate-pulse" />
-        <h1 className="text-4xl font-bold text-center tracking-widest">SYSTEM LOCKDOWN</h1>
-        <p className="text-sm mt-4 text-red-800">ADMINISTRATIVE OVER RIDE ACTIVE</p>
+        <h1 className="text-4xl font-bold text-center tracking-widest">SYSTEM DOWN</h1>
+        <p className="text-sm mt-4 text-red-800">MAINTENANCE MODE ACTIVE VIA ADMIN</p>
       </div>
     );
   }
