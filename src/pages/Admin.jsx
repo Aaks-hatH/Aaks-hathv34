@@ -157,6 +157,26 @@ export default function Admin() {
                 <button onClick={toggleMaintenance} className={`px-6 py-2 text-xs font-bold border ${maintenance?'bg-red-600 text-white':'text-red-500 border-red-900'}`}>{maintenance?"DISENGAGE":"LOCKDOWN"}</button>
             </div>
           </div>
+      {/* DEFCON CONTROL */}
+<div className="border border-slate-800 p-6 mt-4 bg-black">
+    <h3 className="text-sm text-white mb-4 border-b border-slate-800 pb-2">THREAT_LEVEL_INDICATOR</h3>
+    <div className="flex gap-2">
+        {[5, 4, 3, 2, 1].map(level => (
+            <button 
+                key={level}
+                onClick={() => {
+                    fetch('/api/toggle-lockdown', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password, key: 'defcon_level', value: String(level) })
+                    });
+                }}
+                className={`flex-1 py-2 text-xs font-bold border ${level === 1 ? 'border-red-600 text-red-600 hover:bg-red-950' : 'border-slate-700 text-slate-500 hover:text-white'}`}
+            >
+                {level}
+            </button>
+        ))}
+    </div>
+</div>
         )}
 
         {activeTab === 'AUDIT_LOGS' && (
