@@ -11,52 +11,45 @@ export default function GlobalTracker() {
   const [ipInfo, setIpInfo] = useState({ ip: 'Unknown', geo: 'Unknown' });
   const [guestId] = useState(`GUEST-${Math.floor(Math.random() * 10000)}`);
 
-  // 1. IDENTIFY & LOG VISITOR
+  // 1. Helper to parse "true"/"false" safely
+  const isTrue = (val) => String(val).toLowerCase() === 'true';
+
+  // 2. INITIAL SETUP
   useEffect(() => {
-    const init = async () => {
-      try {
-        // Get IP
-        const res = await fetch('/api/whoami');
-        if (!res.ok) throw new Error('API Fail');
-        const data = await res.json();
+    // Identity
+    fetch('/api/whoami').then(r=>r.json()).then(data => {
         setIpInfo(data);
+        supabase.from('banned_ips').select('*').eq('ip', data.ip).maybeSingle()
+            .then(({ data: ban }) => { if(ban) setBanned(true); });
+    }).catch(() => {});
 
-        // Check Ban
-        const { data: banData } = await supabase.from('banned_ips').select('*').eq('ip', data.ip).maybeSingle();
-        if (banData) setBanned(true);
-
-        // LOG VISIT TO DISCORD/DB
-        if (!window.location.pathname.includes('/admin')) {
-            await fetch('/api/log-event', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    actor_type: 'VISITOR',
-                    action: 'PAGE_VIEW',
-                    details: window.location.pathname
-                })
-            });
-        }
-      } catch (e) {
-        console.log("Tracker init failed:", e);
-      }
-    };
-    init();
-  }, []);
-
-  // 2. LISTEN FOR COMMANDS
-  useEffect(() => {
-    // Check initial lock state
+    // Initial Lock Check
     supabase.from('system_config').select('value').eq('key', 'maintenance_mode').maybeSingle()
-      .then(({ data }) => { if (data?.value === 'true') setLocked(true); });
+        .then(({ data }) => { if (data && isTrue(data.value)) setLocked(true); });
 
+    // 3. REALTIME LISTENER
     const sysSub = supabase.channel('system-events')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'system_config' }, (payload) => {
-        const { key, value } = payload.new;
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, (payload) => {
+        console.log("SIGNAL:", payload); // Check Console for this
         
-        if (key === 'maintenance_mode') setLocked(value === 'true');
-        if (key === 'system_broadcast') { setBroadcast(value); setTimeout(() => setBroadcast(''), 10000); }
+        const { key, value } = payload.new || {}; // Handle potential empty payload
         
+        if (!key) return; // Skip if data is missing
+
+        // Lockdown
+        if (key === 'maintenance_mode') {
+            const status = isTrue(value);
+            console.log("LOCKDOWN SET TO:", status);
+            setLocked(status);
+        }
+        
+        // Broadcast
+        if (key === 'system_broadcast') {
+            setBroadcast(value);
+            setTimeout(() => setBroadcast(''), 10000);
+        }
+
+        // Commands (Rickroll/Reload)
         if (key === 'system_command') {
             const cmd = value.split('|')[0];
             if (cmd === 'RICKROLL') window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
@@ -64,32 +57,60 @@ export default function GlobalTracker() {
             if (cmd.startsWith('ALERT:')) alert(cmd.split('ALERT:')[1]);
         }
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'banned_ips' }, (payload) => {
-         if (payload.new.ip === ipInfo.ip) setBanned(true);
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'banned_ips' }, (payload) => {
-         if (payload.old.ip === ipInfo.ip) setBanned(false);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'banned_ips' }, (payload) => {
+        // Listen for ANY ban change matching our IP
+        if (payload.new && payload.new.ip === ipInfo.ip) setBanned(true);
+        if (payload.eventType === 'DELETE' && payload.old && payload.old.ip === ipInfo.ip) setBanned(false);
       })
       .subscribe();
 
     return () => { supabase.removeChannel(sysSub); };
   }, [ipInfo.ip]);
 
-  // 3. PRESENCE (LIVE MAP)
+  // 4. PRESENCE (LIVE TRAFFIC)
   useEffect(() => {
      if(ipInfo.ip === 'Unknown') return;
      const channel = supabase.channel('online-users', { config: { presence: { key: guestId } } });
      channel.subscribe(status => {
          if(status === 'SUBSCRIBED') {
-             channel.track({ id: guestId, path: location.pathname, ua: navigator.userAgent, ip: ipInfo.ip, geo: ipInfo.geo, timestamp: new Date().toISOString() });
+             channel.track({ 
+                 id: guestId, path: location.pathname, ua: navigator.userAgent, 
+                 ip: ipInfo.ip, geo: ipInfo.geo, timestamp: new Date().toISOString() 
+             });
          }
      });
      return () => { supabase.removeChannel(channel); };
   }, [location, guestId, ipInfo]);
 
-  if (banned) return <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center text-red-600 font-mono text-2xl">IP BANNED</div>;
-  if (locked && !location.pathname.includes('/admin')) return <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center text-red-600 font-bold text-2xl">SYSTEM LOCKDOWN</div>;
-  if (broadcast) return <div className="fixed top-4 right-4 z-[9999] bg-slate-900 border border-cyan-500 text-cyan-400 p-4 rounded shadow-lg font-mono text-xs">{broadcast}</div>;
+  // --- UI ---
+  if (banned) return (
+      <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center text-red-600 font-mono p-4">
+         <Ban className="w-24 h-24 mb-4 animate-pulse" />
+         <h1 className="text-3xl font-bold text-center">ACCESS DENIED</h1>
+         <p className="mt-2 text-sm text-red-400">IP BLACKLISTED</p>
+         <p className="text-xs text-slate-600 mt-4 font-mono">{ipInfo.ip}</p>
+      </div>
+  );
+
+  // Only block if NOT on Admin page
+  if (locked && !location.pathname.includes('/admin')) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center text-red-600 font-mono p-4">
+        <ShieldAlert className="w-24 h-24 mb-4 animate-pulse" />
+        <h1 className="text-4xl font-bold text-center tracking-widest">SYSTEM LOCKDOWN</h1>
+        <p className="text-sm mt-4 text-red-800">ADMINISTRATIVE OVER RIDE ACTIVE</p>
+      </div>
+    );
+  }
+
+  if (broadcast) return (
+    <div className="fixed top-4 right-4 z-[9999] animate-in slide-in-from-top-5 fade-in">
+      <div className="bg-slate-900 border border-cyan-500 text-cyan-400 p-4 rounded shadow-lg flex items-center gap-3 max-w-sm">
+        <Info className="w-5 h-5 shrink-0" />
+        <div><h3 className="font-bold text-sm mb-1">ADMIN MESSAGE</h3><p className="text-xs text-slate-300 font-mono">{broadcast}</p></div>
+      </div>
+    </div>
+  );
 
   return null;
 }
