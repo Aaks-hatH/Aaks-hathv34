@@ -31,6 +31,11 @@ export async function onRequestPost(context) {
     const sbKey = context.env.SUPABASE_SERVICE_KEY;
     const webhookUrl = context.env.DISCORD_WEBHOOK_URL;
 
+    if (action === 'DDOS_FLOOD') {
+    // 429 = Too Many Requests
+    return new Response("Rate Limited", { status: 429 });
+}
+
     // 5. Save to Database (Audit Log)
     if (sbKey) {
         const supabase = createClient(sbUrl, sbKey);
@@ -41,6 +46,8 @@ export async function onRequestPost(context) {
             details: details || 'No details provided'
         });
     }
+
+    
 
     // 6. Send to Discord
     if (webhookUrl) {
