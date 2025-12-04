@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import * as OTPAuth from "otpauth";
 
 export async function onRequest(context) {
@@ -24,6 +25,10 @@ export async function onRequest(context) {
     const actualPassword = (context.env.ADMIN_PASSWORD || "").trim();
     const totpSecret = (context.env.ADMIN_TOTP_SECRET || "").replace(/\s/g, ''); 
     const webhookUrl = context.env.DISCORD_WEBHOOK_URL;
+    
+    // Supabase Config
+    const sbUrl = 'https://gdlvzfyvgmeyvlcgggix.supabase.co';
+    const sbKey = context.env.SUPABASE_SERVICE_KEY; // Use Service Key for reliable backend access
 
     // Get Metadata for Logs
     const clientIP = context.request.headers.get("CF-Connecting-IP") || "Unknown";
@@ -34,7 +39,32 @@ export async function onRequest(context) {
         return new Response(JSON.stringify({ error: "Server Config Error: Password not set" }), { status: 500 });
     }
 
-    // 2. PASSWORD CHECK
+    // ---------------------------------------------------------
+    // CHECK 1: DEAD MAN'S SWITCH (Is HUD Online?)
+    // ---------------------------------------------------------
+    if (sbKey) {
+        const supabase = createClient(sbUrl, sbKey);
+        const { data: status } = await supabase.from('admin_status').select('is_online').eq('id', 1).single();
+        
+        if (!status || status.is_online !== true) {
+            // 🚨 ALERT: Login Attempt while Offline
+            await sendDiscordAlert(webhookUrl, `
+\`\`\`diff
+- [SECURITY LOCKOUT ACTIVATED]
+------------------------------
+EVENT:   Login Attempt Rejected
+REASON:  Admin HUD is Offline (Dead Man's Switch)
+IP:      ${clientIP} (${country})
+TIME:    ${timestamp}
+\`\`\`
+`);
+            return new Response(JSON.stringify({ error: "SECURITY LOCKOUT: Admin HUD must be online to authenticate." }), { status: 403 });
+        }
+    }
+
+    // ---------------------------------------------------------
+    // CHECK 2: PASSWORD
+    // ---------------------------------------------------------
     if (password !== actualPassword) {
        await sendDiscordAlert(webhookUrl, `
 \`\`\`diff
@@ -45,12 +75,14 @@ IP:      ${clientIP} (${country})
 TIME:    ${timestamp}
 \`\`\`
 `);
-       // Artificial Delay to stop brute force
+       // Artificial Delay to stop brute force (2 seconds)
        await new Promise(r => setTimeout(r, 2000));
        return new Response(JSON.stringify({ error: "PASSWORD_INCORRECT" }), { status: 401 });
     }
 
-    // 3. 2FA CHECK (TOTP)
+    // ---------------------------------------------------------
+    // CHECK 3: 2FA (TOTP)
+    // ---------------------------------------------------------
     if (totpSecret) {
         const totp = new OTPAuth.TOTP({
           algorithm: "SHA1", digits: 6, period: 30,
@@ -75,7 +107,9 @@ TIME:    ${timestamp}
         }
     }
 
+    // ---------------------------------------------------------
     // 4. SUCCESS
+    // ---------------------------------------------------------
     await sendDiscordAlert(webhookUrl, `
 \`\`\`css
 [SUCCESS] ADMIN SESSION ESTABLISHED
