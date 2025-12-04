@@ -6,7 +6,8 @@ import ProjectDetail from '@/pages/ProjectDetail';
 import ToolsDashboard from '@/pages/ToolsDashboard';
 import Admin from '@/pages/Admin';
 import KonamiCode from '@/components/portfolio/KonamiCode';
-import GlobalTracker from '@/components/GlobalTracker'; // <--- IMPORT THIS
+import GlobalTracker from '@/components/GlobalTracker'; 
+import FakeLogin from '@/pages/FakeLogin';
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ function App() {
           <Route path="/ProjectDetail" element={<ProjectDetail />} />
           <Route path="/tools" element={<ToolsDashboard />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/login" element={<FakeLogin />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
