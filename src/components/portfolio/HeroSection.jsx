@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Github, Mail, Cloud, Moon, Sun, Terminal, Wifi } from 'lucide-react';
+import { Github, Mail, Cloud, Moon, Sun, Terminal, Wifi, User } from 'lucide-react';
 import TooltipWrapper from '@/components/ui/tooltip-wrapper';
 import { supabase } from '@/api/base44Client';
 
-// ⚠️ PASTE YOUR DISCORD ID HERE
+// ⚠️ VERIFY THIS IS YOUR REAL ID
 const DISCORD_ID = "1168575437723680850"; 
 
 export default function HeroSection() {
@@ -17,29 +17,29 @@ export default function HeroSection() {
   const [isSleeping, setIsSleeping] = useState(false);
 
   useEffect(() => {
-    // 1. TIME & SLEEP LOGIC
+    // 1. TIME & SLEEP
     const timer = setInterval(() => {
       const now = new Date();
       setTime(now);
-      
-      // Calculate NY Time Hour
       const nyHour = parseInt(now.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }));
-      setIsSleeping(nyHour >= 23 || nyHour < 7); // Sleeping between 11 PM and 7 AM
+      setIsSleeping(nyHour >= 23 || nyHour < 7);
     }, 1000);
 
-    // 2. DISCORD LANYARD
+    // 2. DISCORD LANYARD (With Debugging)
     const fetchLanyard = async () => {
       if (!DISCORD_ID) return;
       try {
         const res = await fetch(`https://api.lanyard.rest/v1/users/${DISCORD_ID}`);
         const data = await res.json();
-        if (data.success) setDiscordData(data.data);
+        if (data.success) {
+            setDiscordData(data.data);
+        }
       } catch (error) { console.error("Lanyard Error:", error); }
     };
     fetchLanyard();
     const lanyardInterval = setInterval(fetchLanyard, 30000);
 
-    // 3. WEATHER (New York)
+    // 3. WEATHER
     const fetchWeather = async () => {
         try {
             const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.00&current_weather=true');
@@ -49,13 +49,15 @@ export default function HeroSection() {
     };
     fetchWeather();
 
-    // 4. ADMIN STATUS (HUD Connection)
+    // 4. ADMIN STATUS (Realtime)
     const checkStatus = async () => {
-        const { data } = await supabase.from('admin_status').select('*').eq('id', 1).single();
+        // Fetch initial
+        const { data } = await supabase.from('admin_status').select('*').eq('id', 1).maybeSingle();
         if (data) {
             const lastBeat = new Date(data.last_heartbeat).getTime();
             const now = new Date().getTime();
-            const isLive = (now - lastBeat) < 120000; // 2 mins timeout
+            // If heartbeat is older than 2 mins, consider offline
+            const isLive = (now - lastBeat) < 120000; 
             setAdminStatus({
                 online: data.is_online && isLive,
                 task: data.current_task
@@ -68,7 +70,7 @@ export default function HeroSection() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'admin_status' }, (payload) => {
           if(payload.new) {
             setAdminStatus({
-                online: payload.new.is_online,
+                online: payload.new.is_online === true, // Strict check
                 task: payload.new.current_task
             });
           }
@@ -82,7 +84,6 @@ export default function HeroSection() {
     };
   }, []);
 
-  // Format NY Time
   const nyTime = time.toLocaleString('en-US', { 
     timeZone: 'America/New_York', 
     hour: '2-digit', 
@@ -102,12 +103,11 @@ export default function HeroSection() {
   return (
     <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 py-20">
       
-      {/* FLAG */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4">
         <span className="text-4xl">🇺🇸</span>
       </motion.div>
 
-      {/* ADMIN STATUS BADGE (From HUD) */}
+      {/* --- ADMIN STATUS BADGE --- */}
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -122,7 +122,6 @@ export default function HeroSection() {
           {adminStatus.online ? "ADMIN ONLINE" : "ADMIN OFFLINE"}
         </div>
         
-        {/* CURRENT TASK */}
         {adminStatus.online && (
             <motion.div 
                 initial={{ opacity: 0, y: -5 }}
@@ -135,7 +134,6 @@ export default function HeroSection() {
         )}
       </motion.div>
 
-      {/* TERMINAL TITLE */}
       <motion.h1 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -161,7 +159,7 @@ export default function HeroSection() {
         OSINT Analyst | Gray Hat Hacker | Web Developer
       </motion.p>
 
-      {/* SOCIAL ICONS */}
+      {/* SOCIALS */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -171,19 +169,17 @@ export default function HeroSection() {
         <TooltipWrapper content="GitHub">
           <motion.a href="https://github.com/aaks-hath" target="_blank" rel="noopener noreferrer" className="group relative" whileHover={{ scale: 1.1, rotate: 5 }}>
             <Github className="w-6 h-6 text-slate-400 group-hover:text-white transition-colors" />
-            <div className="absolute inset-0 bg-white/20 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
           </motion.a>
         </TooltipWrapper>
 
         <TooltipWrapper content="Email">
           <motion.a href="mailto:hariharanaakshat@gmail.com" className="group relative" whileHover={{ scale: 1.1, rotate: 5 }}>
             <Mail className="w-6 h-6 text-slate-400 group-hover:text-cyan-400 transition-colors" />
-            <div className="absolute inset-0 bg-cyan-400/20 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
           </motion.a>
         </TooltipWrapper>
       </motion.div>
 
-      {/* INFO GRID (Time, Sleep, Weather, Discord) */}
+      {/* --- INFO GRID (Discord + Weather) --- */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -217,11 +213,18 @@ export default function HeroSection() {
                 </div>
             </div>
 
-            {/* Discord */}
+            {/* Discord Profile (UPDATED) */}
             <div className="text-right">
                 <p className="text-xs text-slate-500 font-mono mb-1">DISCORD</p>
                 <div className="flex items-center gap-2 justify-end">
-                    <div className={`w-2 h-2 rounded-full ${getStatusColor(discordData?.discord_status)}`}></div>
+                    {discordData?.discord_user ? (
+                        <img 
+                            src={`https://cdn.discordapp.com/avatars/${discordData.discord_user.id}/${discordData.discord_user.avatar}.png`} 
+                            className="w-6 h-6 rounded-full border border-slate-600"
+                        />
+                    ) : <User className="w-5 h-5 text-slate-600" />}
+                    
+                    <span className={`w-2 h-2 rounded-full ${getStatusColor(discordData?.discord_status)}`}></span>
                     <span className="text-sm text-slate-300 capitalize">{discordData?.discord_status || 'Offline'}</span>
                 </div>
             </div>
@@ -229,15 +232,15 @@ export default function HeroSection() {
 
       </motion.div>
 
-      {/* Discord Activity (Playing...) */}
+      {/* Discord Activity */}
       {discordData?.activities?.[0] && (
         <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="mt-4 text-xs text-slate-500 font-mono flex items-center gap-2"
+            className="mt-4 text-xs text-slate-500 font-mono flex items-center gap-2 bg-slate-900/50 px-4 py-2 rounded-full border border-slate-800"
         >
             <Wifi className="w-3 h-3 animate-pulse text-green-500" />
-            Playing: <span className="text-green-400">{discordData.activities[0].name}</span>
+            Activity: <span className="text-green-400">{discordData.activities[0].name}</span>
         </motion.div>
       )}
 
