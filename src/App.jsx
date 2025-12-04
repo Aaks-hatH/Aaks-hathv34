@@ -5,17 +5,17 @@ import Home from '@/pages/Home';
 import ProjectDetail from '@/pages/ProjectDetail';
 import ToolsDashboard from '@/pages/ToolsDashboard';
 import Admin from '@/pages/Admin';
+import HUD from '@/pages/HUD'; // <--- 1. IMPORT THIS
 import KonamiCode from '@/components/portfolio/KonamiCode';
-import GlobalTracker from '@/components/GlobalTracker'; 
-import FakeLogin from '@/pages/FakeLogin';
+import GlobalTracker from '@/components/GlobalTracker';
 
 const queryClient = new QueryClient();
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter> {/* Tracker needs Router context */}
-        <GlobalTracker /> {/* <--- ADD THIS HERE */}
+      <BrowserRouter>
+        <GlobalTracker />
         <KonamiCode />
         <Routes>
           <Route path="/" element={<Home />} />
@@ -23,7 +23,10 @@ function App() {
           <Route path="/ProjectDetail" element={<ProjectDetail />} />
           <Route path="/tools" element={<ToolsDashboard />} />
           <Route path="/admin" element={<Admin />} />
-          <Route path="/login" element={<FakeLogin />} />
+          
+          {/* 2. ADD THIS ROUTE */}
+          <Route path="/hud" element={<HUD />} />
+          
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
