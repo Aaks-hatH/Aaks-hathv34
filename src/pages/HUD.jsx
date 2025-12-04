@@ -1,15 +1,47 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/api/base44Client';
-import { Activity, Wifi, Terminal, Eye, Lock, Zap, ShieldAlert, Volume2 } from 'lucide-react';
+import { Activity, Wifi, Terminal, Eye, Lock, ShieldAlert, Zap } from 'lucide-react';
 
-// SOUNDS (Bleeps and Alarms)
-const ALARM_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; // Sci-fi Alarm
-const BLEEP_URL = "https://assets.mixkit.co/active_storage/sfx/2346/2346-preview.mp3"; // Data chirp
+// --- SYNTHETIC AUDIO SYSTEM (No external files needed) ---
+const playSound = (type) => {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  
+  const ctx = new AudioContext();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  if (type === 'BLEEP') {
+    // High pitch data chirp
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1200, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(2000, ctx.currentTime + 0.05);
+    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.05);
+  } 
+  
+  if (type === 'ALARM') {
+    // Low pitch warning siren
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.5);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  }
+};
 
 export default function HUD() {
   const [auth, setAuth] = useState(false);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   
   // Dashboard State
   const [task, setTask] = useState('System Idle');
@@ -18,37 +50,61 @@ export default function HUD() {
   const [currentTime, setCurrentTime] = useState(new Date());
   
   // Security State
-  const [threatLevel, setThreatLevel] = useState('NORMAL'); // NORMAL | WARNING | CRITICAL
+  const [threatLevel, setThreatLevel] = useState('NORMAL'); 
   const [verificationStatus, setVerificationStatus] = useState('ANALYZING_DEVICE...');
 
-  // Refs for Audio
-  const alarmAudio = useRef(new Audio(ALARM_URL));
-  const bleepAudio = useRef(new Audio(BLEEP_URL));
+  // ---------------------------------------------------------
+  // 1. LOGIN HANDLER
+  // ---------------------------------------------------------
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+        // Attempt to send a heartbeat with the password
+        const res = await fetch('/api/heartbeat', {
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password, task, status: true })
+        });
+
+        if (res.ok) {
+            setAuth(true);
+            playSound('BLEEP');
+        } else {
+            setError("ACCESS DENIED: WRONG PASSWORD");
+            setPassword('');
+        }
+    } catch (err) {
+        setError("CONNECTION ERROR");
+    } finally {
+        setLoading(false);
+    }
+  };
 
   // ---------------------------------------------------------
-  // 1. DEVICE INTEGRITY CHECK (The Rickroll Protection)
+  // 2. DEVICE INTEGRITY CHECK
   // ---------------------------------------------------------
   useEffect(() => {
     const checkAccess = async () => {
-        // A. Check if Chromebook/Linux (Basic filter)
         const ua = navigator.userAgent;
-        const isSafeDevice = ua.includes("CrOS") || ua.includes("Linux"); 
-      
+        // Check for Chromebook (CrOS), Linux, or Mac/Windows (for testing)
+        const isSafeDevice = ua.includes("CrOS") || ua.includes("Linux") || ua.includes("Mac") || ua.includes("Win");
+
         if (!isSafeDevice) {
             window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
             return;
         }
 
-        // B. Check IP (Server Side Validation)
+        // Check IP Access
         try {
-            const res = await fetch('/api/hud-access'); // Uses the IP check function we made
+            const res = await fetch('/api/hud-access');
             if (res.ok) {
                 setVerificationStatus("ACCESS_GRANTED");
             } else {
-                setVerificationStatus("UNAUTHORIZED_IP");
-                setTimeout(() => {
-                    window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-                }, 2000);
+                // If IP fails, we warn but allow login (in case dynamic IP changes)
+                setVerificationStatus("UNAUTHORIZED_IP (LOGIN REQUIRED)");
             }
         } catch(e) {
             setVerificationStatus("NET_ERROR");
@@ -58,7 +114,7 @@ export default function HUD() {
   }, []);
 
   // ---------------------------------------------------------
-  // 2. WAKE LOCK (Prevent Sleep)
+  // 3. WAKE LOCK (Prevent Sleep)
   // ---------------------------------------------------------
   useEffect(() => {
     if (!auth) return;
@@ -68,7 +124,6 @@ export default function HUD() {
       try {
         if ('wakeLock' in navigator) {
           wakeLock = await navigator.wakeLock.request('screen');
-          console.log('Wake Lock Active: Screen will not sleep.');
         }
       } catch (err) {
         console.error(`${err.name}, ${err.message}`);
@@ -77,7 +132,6 @@ export default function HUD() {
     
     requestWakeLock();
     
-    // Re-acquire lock if visibility changes (e.g., switching tabs)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') requestWakeLock();
     };
@@ -85,32 +139,6 @@ export default function HUD() {
     
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [auth]);
-
-  // ---------------------------------------------------------
-  // 3. IDLE DETECTION (Auto-update "What I'm doing")
-  // ---------------------------------------------------------
-  useEffect(() => {
-    if(!auth) return;
-    let idleTimer;
-    const resetIdle = () => {
-        // If we were AFK, switch back to Active
-        if(task.includes("(AFK)")) {
-            setTask(prev => prev.replace(" (AFK)", ""));
-        }
-        clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => {
-            // If no mouse move for 5 mins, mark AFK
-            setTask(prev => prev.includes("(AFK)") ? prev : prev + " (AFK)");
-        }, 300000); // 5 minutes
-    };
-    
-    window.addEventListener('mousemove', resetIdle);
-    window.addEventListener('keydown', resetIdle);
-    return () => {
-        window.removeEventListener('mousemove', resetIdle);
-        window.removeEventListener('keydown', resetIdle);
-    };
-  }, [auth, task]);
 
   // ---------------------------------------------------------
   // 4. DATA STREAMS & THREAT DETECTION
@@ -134,21 +162,19 @@ export default function HUD() {
       .on('presence', { event: 'sync' }, () => setVisitors(Object.keys(presence.presenceState()).length))
       .subscribe();
 
-    // Logs & Threat Detection
+    // Logs & Audio
     const logSub = supabase.channel('hud-logs')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, (p) => {
         const newLog = p.new;
         setLogs(prev => [newLog, ...prev].slice(0, 20));
         
-        // THREAT ANALYSIS
+        // THREAT ANALYSIS & SOUND
         if (newLog.actor_type === 'ATTACKER' || newLog.action.includes('HONEYPOT') || newLog.action.includes('BAN')) {
             setThreatLevel('CRITICAL');
-            alarmAudio.current.play().catch(()=>{});
-            // Reset threat level after 5 seconds
+            playSound('ALARM');
             setTimeout(() => setThreatLevel('NORMAL'), 5000);
         } else {
-            // Normal traffic beep
-            bleepAudio.current.play().catch(()=>{});
+            playSound('BLEEP');
         }
       })
       .subscribe();
@@ -157,38 +183,32 @@ export default function HUD() {
         clearInterval(timer); clearInterval(hbInt); 
         supabase.removeChannel(presence); supabase.removeChannel(logSub); 
     };
-  }, [auth, task]); // Updates heartbeat if task changes
+  }, [auth, task]);
 
   // ---------------------------------------------------------
   // LOGIN UI
   // ---------------------------------------------------------
-  if (verificationStatus !== "ACCESS_GRANTED") {
-      return <div className="min-h-screen bg-black text-red-600 font-mono flex items-center justify-center text-xl animate-pulse">{verificationStatus}</div>;
+  if (verificationStatus === "NET_ERROR") {
+      return <div className="min-h-screen bg-black text-red-600 font-mono flex items-center justify-center text-xl animate-pulse">NETWORK FAILURE</div>;
   }
 
   if (!auth) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 font-mono">
-        <div className="w-full max-w-md border border-cyan-900/50 p-8 bg-slate-950 text-center">
+        <div className="w-full max-w-md border border-cyan-900/50 p-8 bg-slate-950 text-center shadow-[0_0_30px_rgba(8,145,178,0.2)]">
           <Lock className="w-12 h-12 text-cyan-500 mx-auto mb-4" />
           <h1 className="text-cyan-500 tracking-[0.5em] text-xl mb-8">HUD_LOGIN</h1>
-          <form onSubmit={async (e) => {
-              e.preventDefault();
-              setLoading(true);
-              const res = await fetch('/api/heartbeat', { method: 'POST', body: JSON.stringify({ password, task, status: true }) });
-              setLoading(false);
-              if(res.ok) setAuth(true);
-              else alert("INVALID AUTH");
-          }}>
+          <form onSubmit={handleLogin}>
             <input 
                 type="password" 
                 value={password} 
                 onChange={e=>setPassword(e.target.value)} 
-                className="w-full bg-black border border-slate-800 p-3 text-cyan-400 text-center outline-none focus:border-cyan-500" 
+                className="w-full bg-black border border-slate-800 p-3 text-cyan-400 text-center outline-none focus:border-cyan-500 placeholder-slate-800" 
                 autoFocus 
-                placeholder="PASSWORD"
+                placeholder="ENTER PASSCODE"
             />
-            <button type="submit" disabled={loading} className="w-full mt-4 bg-cyan-900/20 text-cyan-400 py-2 border border-cyan-900 hover:bg-cyan-900/40">
+            {error && <div className="text-red-500 text-xs mt-4 font-bold animate-pulse">{error}</div>}
+            <button type="submit" disabled={loading} className="w-full mt-6 bg-cyan-900/20 text-cyan-400 py-2 border border-cyan-900 hover:bg-cyan-900/40 transition-colors font-bold tracking-widest">
                 {loading ? "VERIFYING..." : "INITIALIZE SYSTEM"}
             </button>
           </form>
@@ -233,7 +253,7 @@ export default function HUD() {
                     onChange={e => setTask(e.target.value)}
                     className="w-full bg-black border border-slate-800 p-3 text-xl text-white outline-none focus:border-green-500 h-32 resize-none"
                 />
-                <div className="mt-2 text-[10px] opacity-50 text-right">AUTO-AFK ENABLED (5 MIN)</div>
+                <div className="mt-2 text-[10px] opacity-50 text-right">UPDATES PUBLIC SITE INSTANTLY</div>
             </div>
 
             <div className={`border p-4 ${threatLevel === 'CRITICAL' ? 'border-red-500 bg-red-900/20' : 'border-green-900 bg-green-950/5'}`}>
