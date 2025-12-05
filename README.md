@@ -1,6 +1,10 @@
 # 💫 About Me:
 About Me<br>I’m currently working on making a network scanner using Nmap<br>I’m looking for help with learning more OSINT topics<br>I’m currently learning Python and more about Cybersecurity<br>Ask me about anything OSINT<br><br>Projects<br>• Face Recognizer<br>Live Demo: https://aaks-hath.github.io/face-rec/<br>A browser-based face recognition tool using machine learning and detection libraries.<br><br>• Password Generator<br>Live Demo: https://aaks-hath.github.io/Password-Generator/<br>Creates secure, randomized passwords with adjustable strength options.<br><br>• Password Strength Checker<br>Live Demo: https://aaks-hath.github.io/Password-Checker/<br>Evaluates password strength based on entropy, complexity, and known weak patterns.<br><br>• Full-Stack Halloween Game (Admin needed, use contact email for testing)<br>Live Demo: https://aaks-hath.github.io/Halloween-Game/<br>A themed web game with backend-style components and progression logic.<br><br>
 
+## Cert For Fun 
+
+[![NoSkid Verification](https://noskid.today/badge/1200x420/?repo=Aaks-hath/Aaks-hatH)](https://noskid.today)
+
 
 ## 🌐 Socials:
 [![Reddit](https://img.shields.io/badge/Reddit-%23FF4500.svg?logo=Reddit&logoColor=white)](https://reddit.com/user/YardStunning2324) [![TikTok](https://img.shields.io/badge/TikTok-%23000000.svg?logo=TikTok&logoColor=white)](https://tiktok.com/@Aakshat.Hariharan) [![email](https://img.shields.io/badge/Email-D14836?logo=gmail&logoColor=white)](mailto:hariharanaakshat@gmail.com) 
