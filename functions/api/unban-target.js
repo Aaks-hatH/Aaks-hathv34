@@ -7,26 +7,23 @@ export async function onRequestPost(context) {
     const sbUrl = 'https://gdlvzfyvgmeyvlcgggix.supabase.co';
     const sbKey = context.env.SUPABASE_SERVICE_KEY;
 
-    // 1. Verify Admin
-    if (password !== adminPass) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    }
+    if (password !== adminPass) return new Response("Unauthorized", { status: 401 });
 
-    // 2. Connect as Admin
     const supabase = createClient(sbUrl, sbKey);
 
-    // 3. Delete the Ban Record
-    const { error } = await supabase
-      .from('banned_ips')
-      .delete()
-      .eq('ip', ip);
-
+    // 1. Remove Ban
+    const { error } = await supabase.from('banned_ips').delete().eq('ip', ip);
     if (error) throw error;
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { "Content-Type": "application/json" }
+    // 2. LOG THE MERCY
+    await supabase.from('audit_logs').insert({
+        actor_type: 'ADMIN',
+        ip: ip,
+        action: 'UNBAN_TARGET',
+        details: 'Access restored by admin'
     });
 
+    return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
