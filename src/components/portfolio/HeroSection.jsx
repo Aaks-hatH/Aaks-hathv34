@@ -119,7 +119,7 @@ export default function HeroSection() {
             {adminStatus.online && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>}
             <span className={`relative inline-flex rounded-full h-2 w-2 ${adminStatus.online ? 'bg-green-500' : 'bg-slate-600'}`}></span>
           </div>
-          {adminStatus.online ? "ADMIN ONLINE" : "ADMIN OFFLINE"}
+          {adminStatus.online ? "Aakshat ONLINE" : "Aakshat OFFLINE"}
         </div>
         
         {adminStatus.online && (
@@ -129,7 +129,7 @@ export default function HeroSection() {
                 className="flex items-center gap-2 text-[10px] text-cyan-400 font-mono bg-cyan-950/30 px-3 py-1 rounded border border-cyan-900/50"
             >
                <Terminal className="w-3 h-3" />
-               <span>EXEC: {adminStatus.task}</span>
+               <span>What I'm doing right now?: {adminStatus.task}</span>
             </motion.div>
         )}
       </motion.div>
