@@ -3,7 +3,7 @@ About Me<br>I’m currently working on making a network scanner using Nmap<br>I�
 
 ## Cert For Fun 
 
-[![NoSkid Verification](https://raw.githubusercontent.com/Aaks-hatH/Aaks-hatH/main/noskid/certificate.png)](https://noskid.today)
+[![NoSkid Verification](https://raw.githubusercontent.com/Aaks-hatH/Aaks-hatH/main/noskid/certificate.PNG)](https://noskid.today)
 
 ## 🌐 Socials:
 [![Reddit](https://img.shields.io/badge/Reddit-%23FF4500.svg?logo=Reddit&logoColor=white)](https://reddit.com/user/YardStunning2324) [![TikTok](https://img.shields.io/badge/TikTok-%23000000.svg?logo=TikTok&logoColor=white)](https://tiktok.com/@Aakshat.Hariharan) [![email](https://img.shields.io/badge/Email-D14836?logo=gmail&logoColor=white)](mailto:hariharanaakshat@gmail.com) 
