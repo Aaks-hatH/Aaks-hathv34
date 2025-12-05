@@ -11,13 +11,21 @@ export async function onRequestPost(context) {
 
     const supabase = createClient(sbUrl, sbKey);
 
-    // Add to Ban Table
+    // 1. Perform Ban
     const { error } = await supabase.from('banned_ips').upsert({ 
       ip: ip, 
-      reason: reason || "Administrative Action" 
+      reason: reason || "Manual Ban" 
     });
 
     if (error) throw error;
+
+    // 2. CREATE PERMANENT RECORD (Log it)
+    await supabase.from('audit_logs').insert({
+        actor_type: 'ADMIN',
+        ip: ip, // Log the IP being banned
+        action: 'BAN_TARGET',
+        details: `Reason: ${reason}`
+    });
 
     return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
