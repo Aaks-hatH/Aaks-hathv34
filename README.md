@@ -3,7 +3,7 @@ About Me<br>I’m currently working on making a network scanner using Nmap<br>I�
 
 ## Cert For Fun 
 
-[![NoSkid Verification](https://noskid.today/badge/1200x420/?repo=Aaks-hath/Aaks-hatH)](https://noskid.today)
+[![NoSkid Verification](https://noskid.today/badge/1200x420/?repo=Aaks-hatH/Aaks-hatH)](https://noskid.today)
 
 
 ## 🌐 Socials:
