@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/api/base44Client';
 import { Activity, Wifi, Terminal, Eye, Lock, ShieldAlert, Zap } from 'lucide-react';
 
-// --- SYNTHETIC AUDIO SYSTEM (No external files needed) ---
+// --- SYNTHETIC AUDIO SYSTEM ---
 const playSound = (type) => {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if (!AudioContext) return;
@@ -15,7 +15,6 @@ const playSound = (type) => {
   gain.connect(ctx.destination);
 
   if (type === 'BLEEP') {
-    // High pitch data chirp
     osc.type = 'sine';
     osc.frequency.setValueAtTime(1200, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(2000, ctx.currentTime + 0.05);
@@ -26,7 +25,6 @@ const playSound = (type) => {
   } 
   
   if (type === 'ALARM') {
-    // Low pitch warning siren
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(200, ctx.currentTime);
     osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.5);
@@ -43,18 +41,50 @@ export default function HUD() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // Dashboard State
   const [task, setTask] = useState('System Idle');
   const [visitors, setVisitors] = useState(0);
   const [logs, setLogs] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   
-  // Security State
   const [threatLevel, setThreatLevel] = useState('NORMAL'); 
   const [verificationStatus, setVerificationStatus] = useState('ANALYZING_DEVICE...');
 
   // ---------------------------------------------------------
-  // 1. LOGIN HANDLER
+  // 1. DEVICE INTEGRITY CHECK (Strict Chromebook Only)
+  // ---------------------------------------------------------
+  useEffect(() => {
+    const checkAccess = async () => {
+        const ua = navigator.userAgent;
+        
+        // STRICT CHECK: Must contain "CrOS" (Chrome OS)
+        // This blocks Windows ("Win"), Mac ("Mac"), Linux ("Linux" without CrOS), and Phones.
+        const isChromebook = ua.includes("CrOS");
+
+        if (!isChromebook) {
+            setVerificationStatus("UNAUTHORIZED HARDWARE: NOT A CHROMEBOOK");
+            setTimeout(() => {
+                window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+            }, 1500);
+            return;
+        }
+
+        // Check IP Access
+        try {
+            const res = await fetch('/api/hud-access');
+            if (res.ok) {
+                setVerificationStatus("ACCESS_GRANTED");
+            } else {
+                setVerificationStatus("UNAUTHORIZED_IP (LOGIN REQUIRED)");
+            }
+        } catch(e) {
+            setVerificationStatus("NET_ERROR");
+        }
+    };
+    checkAccess();
+  }, []);
+
+  // ---------------------------------------------------------
+  // 2. LOGIN HANDLER
   // ---------------------------------------------------------
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -62,7 +92,6 @@ export default function HUD() {
     setError('');
 
     try {
-        // Attempt to send a heartbeat with the password
         const res = await fetch('/api/heartbeat', {
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' },
@@ -82,36 +111,6 @@ export default function HUD() {
         setLoading(false);
     }
   };
-
-  // ---------------------------------------------------------
-  // 2. DEVICE INTEGRITY CHECK
-  // ---------------------------------------------------------
-  useEffect(() => {
-    const checkAccess = async () => {
-        const ua = navigator.userAgent;
-        // Check for Chromebook (CrOS), Linux, or Mac/Windows (for testing)
-        const isSafeDevice = ua.includes("CrOS") || ua.includes("Linux") || ua.includes("Mac") || ua.includes("Win");
-
-        if (!isSafeDevice) {
-            window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-            return;
-        }
-
-        // Check IP Access
-        try {
-            const res = await fetch('/api/hud-access');
-            if (res.ok) {
-                setVerificationStatus("ACCESS_GRANTED");
-            } else {
-                // If IP fails, we warn but allow login (in case dynamic IP changes)
-                setVerificationStatus("UNAUTHORIZED_IP (LOGIN REQUIRED)");
-            }
-        } catch(e) {
-            setVerificationStatus("NET_ERROR");
-        }
-    };
-    checkAccess();
-  }, []);
 
   // ---------------------------------------------------------
   // 3. WAKE LOCK (Prevent Sleep)
@@ -186,10 +185,11 @@ export default function HUD() {
   }, [auth, task]);
 
   // ---------------------------------------------------------
-  // LOGIN UI
+  // UI RENDER
   // ---------------------------------------------------------
-  if (verificationStatus === "NET_ERROR") {
-      return <div className="min-h-screen bg-black text-red-600 font-mono flex items-center justify-center text-xl animate-pulse">NETWORK FAILURE</div>;
+  
+  if (verificationStatus !== "ACCESS_GRANTED" && verificationStatus !== "UNAUTHORIZED_IP (LOGIN REQUIRED)") {
+      return <div className="min-h-screen bg-black text-red-600 font-mono flex items-center justify-center text-xl animate-pulse">{verificationStatus}</div>;
   }
 
   if (!auth) {
@@ -217,9 +217,6 @@ export default function HUD() {
     );
   }
 
-  // ---------------------------------------------------------
-  // MAIN HUD UI
-  // ---------------------------------------------------------
   return (
     <div className={`min-h-screen font-mono p-6 overflow-hidden flex flex-col transition-colors duration-300 ${threatLevel === 'CRITICAL' ? 'bg-red-950' : 'bg-black text-green-500'}`}>
       
