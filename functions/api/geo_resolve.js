@@ -1,42 +1,37 @@
 export async function onRequest(context) {
-  // 1. Handle CORS Preflight
+  // 1. Handle CORS (Preflight)
+  // This ensures browsers don't block the request if headers are strict
   if (context.request.method === "OPTIONS") {
     return new Response(null, {
-      headers: { 
-        "Access-Control-Allow-Origin": "https://aaks-hath.pages.dev", // Lock to YOUR domain
+      headers: {
+        "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type"
       }
     });
   }
 
-  // 2. SECURITY CHECK: Referer/Origin Validation
-  // This blocks direct CURL requests or scanners
-  const referer = context.request.headers.get("Referer") || "";
-  const origin = context.request.headers.get("Origin") || "";
-  
-  // Allow only if coming from your site (or localhost for testing)
-  const allowed = referer.includes("aaks-hath.pages.dev") || origin.includes("aaks-hath.pages.dev") || referer.includes("localhost");
-
-  if (!allowed) {
-      return new Response("Forbidden: Access Denied", { status: 403 });
-  }
-
-  // 3. Standard Logic
+  // 2. Extract Data (Cloudflare provides this automatically)
+  // Even if they use a VPN, Cloudflare sees the VPN's IP/Location
   const ip = context.request.headers.get("CF-Connecting-IP") || "127.0.0.1";
   const country = context.request.headers.get("CF-IPCountry") || "XX";
   const city = context.request.headers.get("CF-IPCity") || "Unknown City";
+  const lat = context.request.headers.get("CF-IPLatitude") || "0";
+  const lon = context.request.headers.get("CF-IPLongitude") || "0";
 
   const identity = {
     ip,
     geo: `${city}, ${country}`,
+    coords: `${lat}, ${lon}`,
     timestamp: new Date().toISOString()
   };
 
+  // 3. Return JSON
+  // Access-Control-Allow-Origin: "*" ensures it works even if headers are stripped by extensions
   return new Response(JSON.stringify(identity), {
     headers: { 
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "https://aaks-hath.pages.dev" // Lock to domain
+      "Access-Control-Allow-Origin": "*" 
     }
   });
 }
