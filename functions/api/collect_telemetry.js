@@ -1,13 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
+// YOUR DISCORD ID
+const ADMIN_ID = "1168575437723680850";
+
 export async function onRequestPost(context) {
   try {
     // --- 🛡️ WAF LAYER 1: USER AGENT FILTERING ---
     const userAgent = (context.request.headers.get("User-Agent") || "").toLowerCase();
     
+    // Check for malicious bots
     if (userAgent.includes("python") || 
         userAgent.includes("curl") || 
-        userAgent.includes("http-client") || 
         userAgent.includes("evilbot")) {
         
         return new Response(JSON.stringify({ 
@@ -15,7 +18,6 @@ export async function onRequestPost(context) {
         }), { status: 403 });
     }
 
-    // Parse Request
     let body;
     try { body = await context.request.json(); } 
     catch (e) { return new Response("Invalid JSON", { status: 400 }); }
@@ -23,15 +25,13 @@ export async function onRequestPost(context) {
     const { actor_type, action, details } = body;
 
     // --- 🛡️ WAF LAYER 2: ATTACK SIGNATURES ---
-    if (action === 'DOS_SIMULATION' || actor_type === 'STRESS_TEST_BOT' || action === 'DDOS_FLOOD') {
+    if (action === 'DOS_SIMULATION' || actor_type === 'STRESS_TEST_BOT') {
         return new Response(JSON.stringify({ error: "RATE_LIMIT_EXCEEDED" }), { status: 429 });
     }
 
-    // Security: Downgrade fake admins
     let safeActor = actor_type;
     if (actor_type === 'ADMIN') safeActor = 'IMPOSTOR'; 
 
-    // Metadata
     const ip = context.request.headers.get("CF-Connecting-IP") || "Unknown";
     const country = context.request.headers.get("CF-IPCountry") || "XX";
     const timestamp = new Date().toISOString();
@@ -51,23 +51,32 @@ export async function onRequestPost(context) {
         });
     }
 
-    // 2. SEND TO DISCORD (UNFILTERED)
+    // 2. SEND TO DISCORD
     if (webhookUrl) {
         let icon = "ℹ️";
-        if (action === 'PAGE_VIEW') icon = "👀"; 
-        if (safeActor === 'IMPOSTOR') icon = "🤡";
-        if (action.includes('TRIPWIRE')) icon = "🪤";
+        let ping = ""; // Default: No Ping
 
+        // LOGIC: Only ping on Critical Events
+        if (safeActor === 'IMPOSTOR' || action.includes('TRIPWIRE') || action.includes('ATTACK')) {
+            ping = `<@${ADMIN_ID}>`; // Ping You
+            icon = "🚨";
+        }
+        
+        // Dont spam pings for page views, but log them
+        if (action === 'PAGE_VIEW') icon = "👀";
+
+        // Filter: Send everything (Remove if you want to hide page views)
         const message = `
+${ping}
 \`\`\`ini
 [${icon} ${action}]
 Actor:   ${safeActor}
 IP:      ${ip} (${country})
-Path:    ${details}
+Details: ${details}
 Time:    ${timestamp}
+Agent:   ${userAgent}
 \`\`\`
 `;
-        // Fire and forget
         context.waitUntil(
             fetch(webhookUrl, {
                 method: "POST",
@@ -77,7 +86,6 @@ Time:    ${timestamp}
         );
     }
 
-    // SUCCESS RETURN (This was likely in the wrong place before)
     return new Response(JSON.stringify({ success: true }), { 
         headers: { "Content-Type": "application/json" } 
     });
