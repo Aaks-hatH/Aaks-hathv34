@@ -86,15 +86,13 @@ export async function onRequestPost(context) {
 
         // Filter: Don't spam Discord with every single page view (optional)
         // Remove this if check if you WANT to see every page view in Discord
-        if (action == 'PAGE_VIEW') {
-            const message = `
+        const message = `
 \`\`\`ini
 [${icon} ${action}]
 Actor:   ${safeActor}
 IP:      ${ip} (${country})
-Details: ${details}
+Path:    ${details}
 Time:    ${timestamp}
-Agent:   ${userAgent}
 \`\`\`
 `;
             // Fire and forget (don't await) to keep site fast
