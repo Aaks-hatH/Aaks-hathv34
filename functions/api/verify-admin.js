@@ -35,8 +35,15 @@ export async function onRequest(context) {
     const country = context.request.headers.get("CF-IPCountry") || "XX";
     const timestamp = new Date().toISOString();
 
-    if (!actualPassword) {
-        return new Response(JSON.stringify({ error: "Server Config Error: Password not set" }), { status: 500 });
+    if (password !== actualPassword) {
+       await sendDiscordAlert(webhookUrl, `...`);
+       await new Promise(r => setTimeout(r, 2000));
+       
+       // Ensure this is 401, NOT 200
+       return new Response(JSON.stringify({ error: "PASSWORD_INCORRECT" }), { 
+           status: 401,
+           headers: { "Content-Type": "application/json" }
+       });
     }
 
     // ---------------------------------------------------------
