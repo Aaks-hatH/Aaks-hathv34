@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { base44, supabase } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
+import { Turnstile } from '@marsidev/react-turnstile';
 import { 
   Trash2, LogOut, ShieldAlert, Radio, Loader2, 
   Megaphone, RefreshCw, Ban, Terminal as TermIcon, 
@@ -8,12 +9,15 @@ import {
 } from 'lucide-react';
 
 export default function Admin() {
+  // Auth State
   const [auth, setAuth] = useState(false);
   const [password, setPassword] = useState('');
   const [totp, setTotp] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState(''); // <--- NEW
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
+  // Dashboard State
   const [activeTab, setActiveTab] = useState('LIVE_TRAFFIC');
   const [messages, setMessages] = useState([]);
   const [visitors, setVisitors] = useState({});
@@ -21,19 +25,17 @@ export default function Admin() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [maintenance, setMaintenance] = useState(false);
   
+  // Inputs
   const [broadcastMsg, setBroadcastMsg] = useState('');
   const [cmd, setCmd] = useState('');
 
   const refreshAll = async () => {
     const msgData = await base44.entities.GuestbookMessage.list();
     setMessages(msgData);
-    
     const { data: bans } = await supabase.from('banned_ips').select('*').order('banned_at', { ascending: false });
     if (bans) setBannedIps(bans);
-
     const { data: logs } = await supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(50);
     if (logs) setAuditLogs(logs);
-
     supabase.from('system_config').select('value').eq('key', 'maintenance_mode').single()
       .then(({ data }) => setMaintenance(data?.value === 'true'));
   };
@@ -48,6 +50,13 @@ export default function Admin() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    
+    // 1. CHECK CAPTCHA
+    if (!turnstileToken) {
+        setError("ANTI-BOT CHECK REQUIRED");
+        return;
+    }
+
     setLoading(true);
     setError('');
     try {
@@ -55,7 +64,11 @@ export default function Admin() {
       const res = await fetch('/api/auth_handshake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, token: totp })
+        body: JSON.stringify({ 
+            password, 
+            token: totp,
+            captcha: turnstileToken // <--- SEND TOKEN
+        })
       });
       const data = await res.json();
       if (data.success) setAuth(true);
@@ -68,65 +81,53 @@ export default function Admin() {
     finally { setLoading(false); }
   };
 
+  // --- ACTIONS ---
   const toggleMaintenance = async () => {
     const newState = !maintenance;
     setMaintenance(newState); 
-    // RENAMED: toggle-lockdown -> sys_config
     await fetch('/api/sys_config', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, key: 'maintenance_mode', value: String(newState) })
     });
   };
-
   const changeDefcon = async (level) => {
-    // RENAMED: toggle-lockdown -> sys_config
     await fetch('/api/sys_config', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, key: 'defcon_level', value: String(level) })
     });
   };
-
   const executeCommand = async (payload) => {
     const uniquePayload = `${payload}|${Date.now()}`;
-    // RENAMED: toggle-lockdown -> sys_config
     await fetch('/api/sys_config', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password, key: 'system_command', value: uniquePayload })
     });
     setCmd('');
   };
-
   const banUser = async (ip) => {
     if(!confirm(`BAN IP: ${ip}?`)) return;
-    // RENAMED: ban-target -> net_block
     await fetch('/api/net_block', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, ip, reason: "Admin Manual Ban" })
     });
     alert(`Target ${ip} has been blacklisted.`);
   };
-
   const unbanUser = async (ip) => {
-    // RENAMED: unban-target -> net_release
     await fetch('/api/net_release', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, ip })
     });
   };
-
   const handleDelete = async (id) => {
     if(!confirm("DELETE RECORD?")) return;
     setMessages(prev => prev.filter(m => m.id !== id));
-    // RENAMED: delete-message -> data_purge
     await fetch('/api/data_purge', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password, id })
     });
   };
-
   const sendBroadcast = async () => {
     if(!broadcastMsg) return;
-    // RENAMED: toggle-lockdown -> sys_config
     await fetch('/api/sys_config', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, key: 'system_broadcast', value: broadcastMsg })
@@ -146,6 +147,16 @@ export default function Admin() {
           <form onSubmit={handleLogin} className="space-y-6">
             <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full bg-black border border-slate-700 p-2 text-white focus:border-cyan-500 outline-none" placeholder="PASSWORD" />
             <input type="text" value={totp} onChange={e=>setTotp(e.target.value)} maxLength={6} className="w-full bg-black border border-slate-700 p-2 text-white tracking-widest focus:border-cyan-500 outline-none" placeholder="2FA CODE" />
+            
+            {/* TURNSTILE WIDGET */}
+            <div className="flex justify-center">
+                <Turnstile 
+                    siteKey="0x4AAAAAACFDgNVZZRDkdRXG" 
+                    onSuccess={(token) => setTurnstileToken(token)}
+                    options={{ theme: 'dark' }}
+                />
+            </div>
+
             {error && <div className="text-red-500 text-xs bg-red-950/20 p-2 border-l-2 border-red-500">ERROR: {error}</div>}
             <button type="submit" disabled={loading} className="w-full bg-slate-100 text-black py-2 text-xs font-bold hover:bg-cyan-500 hover:text-white transition-colors">
               {loading ? "HANDSHAKING..." : "ACCESS"}
@@ -164,13 +175,11 @@ export default function Admin() {
           <div><h1 className="text-xl text-white tracking-widest">OVERWATCH_CONSOLE</h1><p className="text-xs text-cyan-600">ACTIVE_AGENTS: {Object.keys(visitors).length}</p></div>
           <button onClick={() => setAuth(false)} className="text-xs text-red-500 border border-red-900 px-3 py-1 hover:bg-red-900 hover:text-white">[ DISCONNECT ]</button>
         </header>
-
         <div className="grid grid-cols-4 gap-1 mb-8">
           {['LIVE_TRAFFIC', 'SECURITY_LOGS', 'NETWORK_OPS', 'DATABASE'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`py-2 text-xs font-bold ${activeTab===tab ? 'bg-slate-100 text-black' : 'bg-slate-900 hover:bg-slate-800'}`}>{tab}</button>
           ))}
         </div>
-
         {activeTab === 'LIVE_TRAFFIC' && (
           <div className="border border-slate-800 bg-slate-950">
             <table className="w-full text-left text-xs text-slate-400">
@@ -185,7 +194,6 @@ export default function Admin() {
             </table>
           </div>
         )}
-
         {activeTab === 'SECURITY_LOGS' && (
             <div className="border border-slate-800 bg-slate-950 h-[400px] overflow-y-auto">
                 {bannedIps.map(ban => (
@@ -205,7 +213,6 @@ export default function Admin() {
                 </div>
             </div>
         )}
-
         {activeTab === 'NETWORK_OPS' && (
           <div className="grid md:grid-cols-2 gap-8">
             <div className="border border-slate-800 p-6 bg-black space-y-4">
@@ -218,8 +225,6 @@ export default function Admin() {
                     <ShieldAlert className={`w-12 h-12 mx-auto mb-4 ${maintenance ? 'text-red-500 animate-pulse' : 'text-slate-600'}`} />
                     <button onClick={toggleMaintenance} className={`px-6 py-2 text-xs font-bold border ${maintenance ? 'bg-red-600 text-white' : 'text-red-500 border-red-900'}`}>{maintenance?"DISENGAGE":"LOCKDOWN"}</button>
                 </div>
-                
-                {/* DEFCON CONTROL */}
                 <div className="border border-slate-800 p-6 bg-black">
                     <h3 className="text-sm text-white mb-4 border-b border-slate-800 pb-2">THREAT_LEVEL_INDICATOR</h3>
                     <div className="flex gap-2">
@@ -228,10 +233,16 @@ export default function Admin() {
                         ))}
                     </div>
                 </div>
+                <div className="border border-slate-800 p-4">
+                    <div className="text-xs text-slate-400 mb-2 flex items-center gap-2"><Megaphone className="w-3 h-3"/> SYSTEM_BROADCAST</div>
+                    <div className="flex gap-2">
+                        <input value={broadcastMsg} onChange={e=>setBroadcastMsg(e.target.value)} className="flex-1 bg-slate-900 border border-slate-700 p-2 text-white text-xs" placeholder="Message..." />
+                        <button onClick={sendBroadcast} className="bg-cyan-900/20 border border-cyan-900 text-cyan-500 text-xs px-3">SEND</button>
+                    </div>
+                </div>
             </div>
           </div>
         )}
-
         {activeTab === 'DATABASE' && (
             <div className="grid gap-2">
                 {messages.map(m=><div key={m.id} className="bg-slate-900 p-3 flex justify-between border border-slate-800"><div><span className="text-cyan-500 text-xs font-bold mr-2">{m.name}</span><span className="text-slate-400 text-sm">{m.message}</span></div><button onClick={()=>handleDelete(m.id)}><Trash2 className="w-4 h-4 text-red-500"/></button></div>)}
