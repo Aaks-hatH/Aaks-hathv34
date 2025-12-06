@@ -28,7 +28,7 @@ function AiCodeAuditor() {
     setAnalysis("");
 
     try {
-      const res = await fetch('/api/ai-audit', {
+      const res = await fetch('/api/engine_a', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code })
@@ -94,7 +94,7 @@ function VirusTotalScanner() {
     setResult(null);
 
     try {
-      const res = await fetch('/api/vt-scan', {
+      const res = await fetch('/api/engine_v', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target })
