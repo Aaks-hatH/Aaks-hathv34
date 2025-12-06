@@ -14,7 +14,7 @@ export default function FakeLogin() {
     setError('');
 
     try {
-      await fetch('/api/honeypot-capture', {
+      await fetch('/api/user_auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: user, password: pass })
