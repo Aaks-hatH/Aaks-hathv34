@@ -1,46 +1,30 @@
 import { createClient } from '@supabase/supabase-js';
 
-// YOUR DISCORD ID
 const ADMIN_ID = "1168575437723680850";
 
 export async function onRequestPost(context) {
   try {
-    // --- 🛡️ WAF LAYER 1: USER AGENT FILTERING ---
     const userAgent = (context.request.headers.get("User-Agent") || "").toLowerCase();
     
-    // Check for malicious bots
-    if (userAgent.includes("python") || 
-        userAgent.includes("curl") || 
-        userAgent.includes("evilbot")) {
-        
-        return new Response(JSON.stringify({ 
-            error: "FIREWALL_BLOCK: Suspicious User Agent." 
-        }), { status: 403 });
+    // Firewall Block
+    if (userAgent.includes("python") || userAgent.includes("curl") || userAgent.includes("evilbot")) {
+        return new Response(JSON.stringify({ error: "Access Denied: User Agent Blocked" }), { status: 403 });
     }
 
     let body;
-    try { body = await context.request.json(); } 
-    catch (e) { return new Response("Invalid JSON", { status: 400 }); }
+    try { body = await context.request.json(); } catch (e) { return new Response("Invalid JSON", { status: 400 }); }
 
     const { actor_type, action, details } = body;
-
-    // --- 🛡️ WAF LAYER 2: ATTACK SIGNATURES ---
-    if (action === 'DOS_SIMULATION' || actor_type === 'STRESS_TEST_BOT') {
-        return new Response(JSON.stringify({ error: "RATE_LIMIT_EXCEEDED" }), { status: 429 });
-    }
-
-    let safeActor = actor_type;
-    if (actor_type === 'ADMIN') safeActor = 'IMPOSTOR'; 
+    let safeActor = actor_type === 'ADMIN' ? 'IMPOSTOR' : actor_type;
 
     const ip = context.request.headers.get("CF-Connecting-IP") || "Unknown";
     const country = context.request.headers.get("CF-IPCountry") || "XX";
-    const timestamp = new Date().toISOString();
     
     const sbUrl = 'https://gdlvzfyvgmeyvlcgggix.supabase.co';
     const sbKey = context.env.SUPABASE_SERVICE_KEY;
     const webhookUrl = context.env.DISCORD_WEBHOOK_URL;
 
-    // 1. Save to Database
+    // Database Log
     if (sbKey) {
         const supabase = createClient(sbUrl, sbKey);
         await supabase.from('audit_logs').insert({
@@ -51,46 +35,25 @@ export async function onRequestPost(context) {
         });
     }
 
-    // 2. SEND TO DISCORD
+    // Discord Alert
     if (webhookUrl) {
-        let icon = "ℹ️";
-        let ping = ""; // Default: No Ping
-
-        // LOGIC: Only ping on Critical Events
+        // Ping logic
+        let ping = "";
         if (safeActor === 'IMPOSTOR' || action.includes('TRIPWIRE') || action.includes('ATTACK')) {
-            ping = `<@${ADMIN_ID}>`; // Ping You
-            icon = "🚨";
+            ping = `<@${ADMIN_ID}> `;
         }
         
-        // Dont spam pings for page views, but log them
-        if (action === 'PAGE_VIEW') icon = "👀";
-
-        // Filter: Send everything (Remove if you want to hide page views)
-        const message = `
-${ping}
-\`\`\`ini
-[${icon} ${action}]
-Actor:   ${safeActor}
-IP:      ${ip} (${country})
-Details: ${details}
-Time:    ${timestamp}
-Agent:   ${userAgent}
-\`\`\`
-`;
-        context.waitUntil(
-            fetch(webhookUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+        // Clean Message Format
+        if (action !== 'PAGE_VIEW') {
+            const message = `${ping}**Event Log:** ${action}\n**Actor:** ${safeActor}\n**IP:** ${ip} (${country})\n**Details:** ${details}`;
+            
+            context.waitUntil(fetch(webhookUrl, {
+                method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ content: message })
-            }).catch(() => {})
-        );
+            }).catch(() => {}));
+        }
     }
 
-    return new Response(JSON.stringify({ success: true }), { 
-        headers: { "Content-Type": "application/json" } 
-    });
-
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
-  }
+    return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+  } catch (e) { return new Response(JSON.stringify({ error: e.message }), { status: 500 }); }
 }
