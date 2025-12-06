@@ -40,7 +40,7 @@ const projects = [
     description: "A themed web game with backend-style components and progression logic. Full-stack project.",
     link: "https://aaks-hath.github.io/Halloween-Game/",
     emoji: "🎃",
-    tags: ["Game", "Full-Stack", "PHP"],
+    tags: ["Game", "Full-Stack", "JavaScript"],
     updated: "2025",
     category: "game"
   },
