@@ -21,12 +21,18 @@ export async function onRequestPost(context) {
     if (error) throw error;
 
     // 2. Alert Discord
+    const ADMIN_ID = "1168575437723680850";
+
+// ... inside code ...
+    // Alert Discord
     if(webhookUrl) {
-        const cleanValue = String(value).split('|')[0]; // Remove timestamp
-        await fetch(webhookUrl, {
+        const cleanValue = String(value).split('|')[0];
+        const msg = `<@${ADMIN_ID}> \n\`\`\`css\n[ADMIN COMMAND EXECUTED]\nCmd: ${updateKey}\nVal: ${cleanValue}\`\`\``;
+        
+        context.waitUntil(fetch(webhookUrl, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: `\`\`\`css\n[ADMIN ACTION]\nCommand: ${updateKey}\nValue:   ${cleanValue}\`\`\`` })
-        });
+            body: JSON.stringify({ content: msg })
+        }));
     }
 
     return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
