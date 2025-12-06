@@ -1,8 +1,9 @@
 import * as OTPAuth from "otpauth";
 import { createClient } from '@supabase/supabase-js';
 
+const ADMIN_ID = "1168575437723680850";
+
 export async function onRequest(context) {
-  // CORS
   if (context.request.method === "OPTIONS") {
     return new Response(null, { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } });
   }
@@ -14,16 +15,16 @@ export async function onRequest(context) {
     const actualPassword = (context.env.ADMIN_PASSWORD || "").trim();
     const totpSecret = (context.env.ADMIN_TOTP_SECRET || "").replace(/\s/g, '');
     const webhookUrl = context.env.DISCORD_WEBHOOK_URL;
-    const turnstileSecret = context.env.TURNSTILE_SECRET_KEY; // Need this!
+    const turnstileSecret = context.env.TURNSTILE_SECRET_KEY;
+    const sbKey = context.env.SUPABASE_SERVICE_KEY;
     
     const clientIP = context.request.headers.get("CF-Connecting-IP") || "Unknown";
     const country = context.request.headers.get("CF-IPCountry") || "XX";
     const timestamp = new Date().toISOString();
 
-    // 1. TURNSTILE CHECK (New)
+    // 1. CAPTCHA
     if (turnstileSecret) {
         if (!captcha) return new Response(JSON.stringify({ error: "CAPTCHA_REQUIRED" }), { status: 400 });
-
         const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -33,37 +34,35 @@ export async function onRequest(context) {
         if (!verifyData.success) return new Response(JSON.stringify({ error: "CAPTCHA_FAILED" }), { status: 403 });
     }
 
-    if (!actualPassword) return new Response(JSON.stringify({ error: "Server Config Error" }), { status: 500 });
-
-    // 2. DEAD MAN'S SWITCH CHECK
-    const sbKey = context.env.SUPABASE_SERVICE_KEY;
+    // 2. DEAD MAN'S SWITCH
     if (sbKey) {
         const supabase = createClient('https://gdlvzfyvgmeyvlcgggix.supabase.co', sbKey);
         const { data: status } = await supabase.from('admin_status').select('is_online').eq('id', 1).single();
         if (!status || status.is_online !== true) {
-            return new Response(JSON.stringify({ error: "SECURITY LOCKOUT: HUD OFFLINE" }), { status: 403 });
+             await sendDiscordAlert(webhookUrl, `<@${ADMIN_ID}> \n\`\`\`diff\n- [BLOCKED] Offline Lockout Active\nIP: ${clientIP}\`\`\``);
+             return new Response(JSON.stringify({ error: "SECURITY LOCKOUT: HUD OFFLINE" }), { status: 403 });
         }
     }
 
-    // 3. PASSWORD CHECK
+    // 3. PASSWORD
     if (password !== actualPassword) {
-       await sendDiscordAlert(webhookUrl, `\`\`\`diff\n- [FAILED LOGIN] Password Invalid\nIP: ${clientIP} (${country})\nTime: ${timestamp}\`\`\``);
+       await sendDiscordAlert(webhookUrl, `<@${ADMIN_ID}> \n\`\`\`diff\n- [CRITICAL] BAD PASSWORD ATTEMPT\nIP: ${clientIP} (${country})\`\`\``);
        await new Promise(r => setTimeout(r, 2000));
        return new Response(JSON.stringify({ error: "PASSWORD_INCORRECT" }), { status: 401 });
     }
 
-    // 4. 2FA CHECK
+    // 4. 2FA
     if (totpSecret) {
         const totp = new OTPAuth.TOTP({ algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(totpSecret) });
         const delta = totp.validate({ token: token, window: 2 });
         if (delta === null) {
-           await sendDiscordAlert(webhookUrl, `\`\`\`fix\n! [2FA FAILED] Password OK, Code Invalid\nIP: ${clientIP}\`\`\``);
+           await sendDiscordAlert(webhookUrl, `<@${ADMIN_ID}> \n\`\`\`fix\n! [WARNING] 2FA FAILED (Pass OK)\nIP: ${clientIP}\`\`\``);
            return new Response(JSON.stringify({ error: "2FA_CODE_INVALID" }), { status: 401 });
         }
     }
 
     // 5. SUCCESS
-    await sendDiscordAlert(webhookUrl, `\`\`\`css\n[SUCCESS] ADMIN LOGIN\nUser: root\nIP: ${clientIP}\`\`\``);
+    await sendDiscordAlert(webhookUrl, `<@${ADMIN_ID}> \n\`\`\`css\n[SUCCESS] ADMIN SESSION STARTED\nIP: ${clientIP}\`\`\``);
     return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
 
   } catch (e) {
