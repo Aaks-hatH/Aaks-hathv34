@@ -8,63 +8,116 @@ export default function GlobalTracker() {
   const [locked, setLocked] = useState(false);
   const [banned, setBanned] = useState(false);
   const [broadcast, setBroadcast] = useState('');
-  const [ipInfo, setIpInfo] = useState({ ip: 'Detecting...', geo: '---' });
+  
+  // Default to "Analyzing..." so we don't block logic
+  const [ipInfo, setIpInfo] = useState({ ip: 'Analyzing...', geo: 'VPN/Proxy' });
   const [guestId] = useState(`GUEST-${Math.floor(Math.random() * 10000)}`);
 
+  // 1. IP DETECTION (Lazy Load)
   useEffect(() => {
-    const init = async () => {
+    const getIdentity = async () => {
       try {
-        // RENAMED: whoami -> geo_resolve
+        // RENAMED: Make sure this matches your actual file name (geo_resolve.js or whoami.js)
         const res = await fetch('/api/geo_resolve');
+        
         if (res.ok) {
             const data = await res.json();
             setIpInfo(data);
-            const { data: banData } = await supabase.from('banned_ips').select('*').eq('ip', data.ip).maybeSingle();
+            
+            // Check Ban
+            const { data: banData } = await supabase
+                .from('banned_ips')
+                .select('*')
+                .eq('ip', data.ip)
+                .maybeSingle();
             if (banData) setBanned(true);
         } else {
-            setIpInfo({ ip: 'Anonymous/Proxy', geo: 'Unknown' });
+            // VPN Blocked the API request
+            setIpInfo({ ip: 'Hidden (VPN)', geo: 'Unknown' });
         }
-
-        if (!window.location.pathname.includes('/admin')) {
-            // RENAMED: log-event -> collect_telemetry
-            fetch('/api/collect_telemetry', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ actor_type: 'VISITOR', action: 'PAGE_VIEW', details: window.location.pathname })
-            }).catch(() => {});
-        }
-      } catch (e) { setIpInfo({ ip: 'Tracking Failed', geo: 'Hidden' }); }
+      } catch (e) {
+        setIpInfo({ ip: 'Hidden (Error)', geo: 'Unknown' });
+      }
     };
-    init();
-  }, []);
+    getIdentity();
 
+    // Log Page View to Discord (Always runs)
+    if (!window.location.pathname.includes('/admin')) {
+        fetch('/api/collect_telemetry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actor_type: 'VISITOR',
+                action: 'PAGE_VIEW',
+                details: window.location.pathname
+            })
+        }).catch(() => {}); 
+    }
+  }, [location.pathname]);
+
+  // 2. LIVE MAP (PRESENCE) - NOW INDEPENDENT
   useEffect(() => {
-    supabase.from('system_config').select('value').eq('key', 'maintenance_mode').maybeSingle().then(({ data }) => { if (data?.value === 'true') setLocked(true); });
-    const sysSub = supabase.channel('system-events').on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, (payload) => {
+     // Connect immediately. Do not wait for IP.
+     const channel = supabase.channel('online-users', { 
+        config: { presence: { key: guestId } } 
+     });
+
+     channel.subscribe(status => {
+         if(status === 'SUBSCRIBED') {
+             // Send whatever info we have right now
+             channel.track({ 
+                 id: guestId, 
+                 path: location.pathname, 
+                 ua: navigator.userAgent, 
+                 ip: ipInfo.ip, 
+                 geo: ipInfo.geo, 
+                 timestamp: new Date().toISOString() 
+             });
+         }
+     });
+
+     return () => { supabase.removeChannel(channel); };
+  }, [location, guestId, ipInfo]); // Updates when IP finally loads
+
+  // 3. COMMAND LISTENER
+  useEffect(() => {
+    supabase.from('system_config').select('value').eq('key', 'maintenance_mode').maybeSingle()
+      .then(({ data }) => { if (data?.value === 'true') setLocked(true); });
+
+    const sysSub = supabase.channel('system-events')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, (payload) => {
         if (!payload.new) return;
         const { key, value } = payload.new;
+
         if (key === 'maintenance_mode') setLocked(value === 'true');
-        if (key === 'system_broadcast') { setBroadcast(value); setTimeout(() => setBroadcast(''), 10000); }
+        
+        if (key === 'system_broadcast') {
+            setBroadcast(value);
+            setTimeout(() => setBroadcast(''), 10000);
+        }
+
         if (key === 'system_command') {
             const cmd = value.split('|')[0];
             if (cmd === 'RICKROLL') window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
             if (cmd === 'RELOAD') window.location.reload();
             if (cmd.startsWith('ALERT:')) alert(cmd.split('ALERT:')[1]);
         }
-    }).subscribe();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'banned_ips' }, (payload) => {
+         if (payload.new.ip === ipInfo.ip) setBanned(true);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'banned_ips' }, (payload) => {
+         if (payload.old.ip === ipInfo.ip) setBanned(false);
+      })
+      .subscribe();
+
     return () => { supabase.removeChannel(sysSub); };
   }, [ipInfo.ip]);
 
-  useEffect(() => {
-     if(ipInfo.ip === 'Unknown') return;
-     const channel = supabase.channel('online-users', { config: { presence: { key: guestId } } });
-     channel.subscribe(status => {
-         if(status === 'SUBSCRIBED') { channel.track({ id: guestId, path: location.pathname, ua: navigator.userAgent, ip: ipInfo.ip, geo: ipInfo.geo, timestamp: new Date().toISOString() }); }
-     });
-     return () => { supabase.removeChannel(channel); };
-  }, [location, guestId, ipInfo]);
-
-  if (banned) return <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center text-red-600 font-mono p-4"><Ban className="w-24 h-24 mb-4 animate-pulse" /><h1 className="text-3xl font-bold text-center">ACCESS DENIED</h1><p className="mt-2 text-sm text-red-400">IP BLACKLISTED</p></div>;
-  if (locked && !location.pathname.includes('/admin')) return <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center text-red-600 font-mono p-4"><ShieldAlert className="w-24 h-24 mb-4 animate-pulse" /><h1 className="text-4xl font-bold text-center tracking-widest">SYSTEM LOCKDOWN</h1><p className="text-sm mt-4 text-red-800">ADMINISTRATIVE OVERRIDE ACTIVE</p></div>;
+  // UI
+  if (banned) return <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center text-red-600 font-mono p-4"><Ban className="w-24 h-24 mb-4 animate-pulse" /><h1 className="text-3xl font-bold text-center">ACCESS DENIED</h1><p className="mt-2 text-sm text-red-400">TARGET BLACKLISTED</p></div>;
+  if (locked && !location.pathname.includes('/admin')) return <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center text-red-600 font-mono p-4"><ShieldAlert className="w-24 h-24 mb-4 animate-pulse" /><h1 className="text-4xl font-bold text-center tracking-widest">SYSTEM LOCKDOWN</h1></div>;
   if (broadcast) return <div className="fixed top-4 right-4 z-[9999] animate-in slide-in-from-top-5 fade-in"><div className="bg-slate-900 border border-cyan-500 text-cyan-400 p-4 rounded shadow-lg flex items-center gap-3 max-w-sm"><Info className="w-5 h-5 shrink-0" /><div><h3 className="font-bold text-sm mb-1">ADMIN MESSAGE</h3><p className="text-xs text-slate-300 font-mono">{broadcast}</p></div></div></div>;
+
   return null;
 }
