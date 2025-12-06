@@ -2,10 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function onRequestPost(context) {
   try {
-    // ============================================================
-    // 🛡️ WAF LAYER 1: USER AGENT FILTERING
-    // ============================================================
-    // Blocks headless browsers, python scripts, and known bot tools.
+    // --- 🛡️ WAF LAYER 1: USER AGENT FILTERING ---
     const userAgent = (context.request.headers.get("User-Agent") || "").toLowerCase();
     
     if (userAgent.includes("python") || 
@@ -14,51 +11,27 @@ export async function onRequestPost(context) {
         userAgent.includes("evilbot")) {
         
         return new Response(JSON.stringify({ 
-            error: "FIREWALL_BLOCK: Suspicious User Agent detected." 
-        }), { 
-            status: 403, // Forbidden
-            headers: { "Content-Type": "application/json" } 
-        });
+            error: "FIREWALL_BLOCK: Suspicious User Agent." 
+        }), { status: 403 });
     }
 
-    // Parse Request Body
+    // Parse Request
     let body;
-    try {
-      body = await context.request.json();
-    } catch (e) {
-      return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400 });
-    }
+    try { body = await context.request.json(); } 
+    catch (e) { return new Response("Invalid JSON", { status: 400 }); }
 
     const { actor_type, action, details } = body;
 
-    // ============================================================
-    // 🛡️ WAF LAYER 2: ATTACK SIGNATURE DETECTION
-    // ============================================================
-    // Blocks specific payloads used in your stress test script.
-    if (action === 'DOS_SIMULATION' || 
-        actor_type === 'STRESS_TEST_BOT' || 
-        action === 'DDOS_FLOOD') {
-        
-        return new Response(JSON.stringify({ 
-            error: "RATE_LIMIT_EXCEEDED: Attack Pattern Blocked" 
-        }), { 
-            status: 429, // Too Many Requests
-            headers: { "Content-Type": "application/json" } 
-        });
+    // --- 🛡️ WAF LAYER 2: ATTACK SIGNATURES ---
+    if (action === 'DOS_SIMULATION' || actor_type === 'STRESS_TEST_BOT' || action === 'DDOS_FLOOD') {
+        return new Response(JSON.stringify({ error: "RATE_LIMIT_EXCEEDED" }), { status: 429 });
     }
 
-    // ============================================================
-    // 🛡️ SECURITY: ACTOR VALIDATION
-    // ============================================================
-    // Prevents visitors from faking "ADMIN" logs.
+    // Security: Downgrade fake admins
     let safeActor = actor_type;
-    if (actor_type === 'ADMIN') {
-        safeActor = 'IMPOSTOR'; 
-    }
+    if (actor_type === 'ADMIN') safeActor = 'IMPOSTOR'; 
 
-    // ============================================================
-    // 📝 LOGGING LOGIC
-    // ============================================================
+    // Metadata
     const ip = context.request.headers.get("CF-Connecting-IP") || "Unknown";
     const country = context.request.headers.get("CF-IPCountry") || "XX";
     const timestamp = new Date().toISOString();
@@ -74,18 +47,17 @@ export async function onRequestPost(context) {
             actor_type: safeActor,
             ip: `${ip} (${country})`,
             action: action || 'UNKNOWN',
-            details: details || 'No details provided'
+            details: details || 'No details'
         });
     }
 
-    // 2. Send to Discord (Filtered)
+    // 2. SEND TO DISCORD (UNFILTERED)
     if (webhookUrl) {
         let icon = "ℹ️";
+        if (action === 'PAGE_VIEW') icon = "👀"; 
         if (safeActor === 'IMPOSTOR') icon = "🤡";
         if (action.includes('TRIPWIRE')) icon = "🪤";
 
-        // Filter: Don't spam Discord with every single page view (optional)
-        // Remove this if check if you WANT to see every page view in Discord
         const message = `
 \`\`\`ini
 [${icon} ${action}]
@@ -95,15 +67,17 @@ Path:    ${details}
 Time:    ${timestamp}
 \`\`\`
 `;
-            // Fire and forget (don't await) to keep site fast
+        // Fire and forget
+        context.waitUntil(
             fetch(webhookUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ content: message })
-            });
-        }
+            }).catch(() => {})
+        );
     }
 
+    // SUCCESS RETURN (This was likely in the wrong place before)
     return new Response(JSON.stringify({ success: true }), { 
         headers: { "Content-Type": "application/json" } 
     });
