@@ -11,7 +11,7 @@ const projects = [
     link: "https://aaks-hath.github.io/face-rec/",
     emoji: "👤",
     tags: ["ML", "JavaScript", "AI"],
-    updated: "2024",
+    updated: "2025",
     category: "ai"
   },
   {
@@ -21,7 +21,7 @@ const projects = [
     link: "https://aaks-hath.github.io/Password-Generator/",
     emoji: "🔐",
     tags: ["Security", "JavaScript"],
-    updated: "2024",
+    updated: "2025",
     category: "security"
   },
   {
@@ -31,7 +31,7 @@ const projects = [
     link: "https://aaks-hath.github.io/Password-Checker/",
     emoji: "🛡️",
     tags: ["Security", "Analysis"],
-    updated: "2024",
+    updated: "2025",
     category: "security"
   },
   {
@@ -41,7 +41,7 @@ const projects = [
     link: "https://aaks-hath.github.io/Halloween-Game/",
     emoji: "🎃",
     tags: ["Game", "Full-Stack", "PHP"],
-    updated: "2024",
+    updated: "2025",
     category: "game"
   },
   {
