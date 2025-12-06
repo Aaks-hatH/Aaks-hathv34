@@ -2,75 +2,108 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function onRequestPost(context) {
   try {
-    // 1. Safe Request Parsing
+    // ============================================================
+    // 🛡️ WAF LAYER 1: USER AGENT FILTERING
+    // ============================================================
+    // Blocks headless browsers, python scripts, and known bot tools.
+    const userAgent = (context.request.headers.get("User-Agent") || "").toLowerCase();
+    
+    if (userAgent.includes("python") || 
+        userAgent.includes("curl") || 
+        userAgent.includes("http-client") || 
+        userAgent.includes("evilbot")) {
+        
+        return new Response(JSON.stringify({ 
+            error: "FIREWALL_BLOCK: Suspicious User Agent detected." 
+        }), { 
+            status: 403, // Forbidden
+            headers: { "Content-Type": "application/json" } 
+        });
+    }
+
+    // Parse Request Body
     let body;
     try {
       body = await context.request.json();
     } catch (e) {
-      return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400 });
     }
 
     const { actor_type, action, details } = body;
-    
-    // 2. Security: Validate Actor
-    // Since this is a public endpoint, anyone can call it.
-    // We downgrade anyone claiming to be "ADMIN" to "IMPOSTOR" so your logs stay trustworthy.
-    // (Real Admin actions happen via verify-admin.js or toggle-lockdown.js).
+
+    // ============================================================
+    // 🛡️ WAF LAYER 2: ATTACK SIGNATURE DETECTION
+    // ============================================================
+    // Blocks specific payloads used in your stress test script.
+    if (action === 'DOS_SIMULATION' || 
+        actor_type === 'STRESS_TEST_BOT' || 
+        action === 'DDOS_FLOOD') {
+        
+        return new Response(JSON.stringify({ 
+            error: "RATE_LIMIT_EXCEEDED: Attack Pattern Blocked" 
+        }), { 
+            status: 429, // Too Many Requests
+            headers: { "Content-Type": "application/json" } 
+        });
+    }
+
+    // ============================================================
+    // 🛡️ SECURITY: ACTOR VALIDATION
+    // ============================================================
+    // Prevents visitors from faking "ADMIN" logs.
     let safeActor = actor_type;
     if (actor_type === 'ADMIN') {
         safeActor = 'IMPOSTOR'; 
     }
 
-    // 3. Get Metadata (Cloudflare Headers)
+    // ============================================================
+    // 📝 LOGGING LOGIC
+    // ============================================================
     const ip = context.request.headers.get("CF-Connecting-IP") || "Unknown";
     const country = context.request.headers.get("CF-IPCountry") || "XX";
     const timestamp = new Date().toISOString();
     
-    // 4. Get Keys
     const sbUrl = 'https://gdlvzfyvgmeyvlcgggix.supabase.co';
     const sbKey = context.env.SUPABASE_SERVICE_KEY;
     const webhookUrl = context.env.DISCORD_WEBHOOK_URL;
 
-    if (action === 'DDOS_FLOOD') {
-    // 429 = Too Many Requests
-    return new Response("Rate Limited", { status: 429 });
-}
-
-    // 5. Save to Database (Audit Log)
+    // 1. Save to Database
     if (sbKey) {
         const supabase = createClient(sbUrl, sbKey);
         await supabase.from('audit_logs').insert({
             actor_type: safeActor,
             ip: `${ip} (${country})`,
-            action: action || 'UNKNOWN_ACTION',
+            action: action || 'UNKNOWN',
             details: details || 'No details provided'
         });
     }
 
-    
-
-    // 6. Send to Discord
+    // 2. Send to Discord (Filtered)
     if (webhookUrl) {
         let icon = "ℹ️";
         if (safeActor === 'IMPOSTOR') icon = "🤡";
         if (action.includes('TRIPWIRE')) icon = "🪤";
-        
-        // We format this as a code block for the "Hacker" aesthetic
-        const message = `
+
+        // Filter: Don't spam Discord with every single page view (optional)
+        // Remove this if check if you WANT to see every page view in Discord
+        if (action !== 'PAGE_VIEW') {
+            const message = `
 \`\`\`ini
 [${icon} ${action}]
 Actor:   ${safeActor}
 IP:      ${ip} (${country})
 Details: ${details}
 Time:    ${timestamp}
+Agent:   ${userAgent}
 \`\`\`
 `;
-        // We don't await this fetch so the user doesn't have to wait for Discord
-        fetch(webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: message })
-        });
+            // Fire and forget (don't await) to keep site fast
+            fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: message })
+            });
+        }
     }
 
     return new Response(JSON.stringify({ success: true }), { 
