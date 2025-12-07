@@ -45,8 +45,16 @@ export default function Footer() {
           <a href="mailto:hariharanaakshat@gmail.com" className="text-slate-400 hover:text-cyan-400">
             <Mail className="w-5 h-5" />
           </a>
+          <div>
+            <p> Made, Developed, and Pentested by Aakshat Hariharan
+            </p>
+          </div>
         </div>
         <p className="text-slate-500 text-sm font-mono">© {new Date().getFullYear()} Aakshat Hariharan</p>
+      </div>
+      <div>
+        <p> Inspired By kotokk.dev
+        </p>
       </div>
     </footer>
   );
