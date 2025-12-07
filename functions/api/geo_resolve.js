@@ -1,6 +1,6 @@
+
 export async function onRequest(context) {
   // 1. Handle CORS (Preflight)
-  // This ensures browsers don't block the request if headers are strict
   if (context.request.method === "OPTIONS") {
     return new Response(null, {
       headers: {
@@ -11,8 +11,13 @@ export async function onRequest(context) {
     });
   }
 
-  // 2. Extract Data (Cloudflare provides this automatically)
-  // Even if they use a VPN, Cloudflare sees the VPN's IP/Location
+  // 2. Firewall Block (Prevents Direct Endpoint Abuse)
+  const userAgent = (context.request.headers.get("User-Agent") || "").toLowerCase();
+  if (userAgent.includes("python") || userAgent.includes("curl") || userAgent.includes("bot")) {
+      return new Response(JSON.stringify({ error: "Access Denied" }), { status: 403 });
+  }
+
+  // 3. Extract Data
   const ip = context.request.headers.get("CF-Connecting-IP") || "127.0.0.1";
   const country = context.request.headers.get("CF-IPCountry") || "XX";
   const city = context.request.headers.get("CF-IPCity") || "Unknown City";
@@ -26,8 +31,7 @@ export async function onRequest(context) {
     timestamp: new Date().toISOString()
   };
 
-  // 3. Return JSON
-  // Access-Control-Allow-Origin: "*" ensures it works even if headers are stripped by extensions
+  // 4. Return JSON
   return new Response(JSON.stringify(identity), {
     headers: { 
       "Content-Type": "application/json",
