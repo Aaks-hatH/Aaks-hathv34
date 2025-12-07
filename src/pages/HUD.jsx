@@ -92,17 +92,24 @@ export default function HUD() {
   // ---------------------------------------------------------
   useEffect(() => {
       let lastPress = 0;
+      
       const handleKeyDown = (e) => {
           if (e.key === 'Escape') {
               const now = Date.now();
-              if (now - lastPress < 500) { 
+              console.log("ESC PRESSED. Time since last:", now - lastPress); // Debugging
+
+              // Increased window to 1000ms (1 second) for easier triggering
+              if (now - lastPress < 1000) { 
+                  console.log("PANIC TRIGGERED!");
                   setAuth(false);
                   setPassword('');
+                  // Send Offline Signal
                   navigator.sendBeacon('/api/stream_keepalive', JSON.stringify({ password, task, status: false }));
               }
               lastPress = now;
           }
       };
+
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
   }, [password, task]);
