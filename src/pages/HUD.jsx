@@ -63,11 +63,11 @@ export default function HUD() {
   useEffect(() => {
     const runDiagnostics = async () => {
         // A. DEVICE CHECK
+                // A. DEVICE CHECK
         const ua = navigator.userAgent;
-        const isChromebook = ua.includes("CrOS") || ua.includes("Linux");
-        const isDev = ua.includes("Mac") || ua.includes("Win"); // Allow dev machines
+        const isLinuxOrChromebook = ua.includes("CrOS") || ua.includes("Linux");
         
-        if (isChromebook || isDev) {
+        if (isLinuxOrChromebook) {
             setDeviceStatus("VERIFIED_HARDWARE");
         } else {
             setDeviceStatus("UNAUTHORIZED_DEVICE");
