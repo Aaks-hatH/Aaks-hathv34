@@ -1,10 +1,8 @@
 
 export async function onRequest(context) {
-  // DISCORD_WEBHOOK_URL is a secret environment variable
-  // Learn more: https://developers.cloudflare.com/pages/functions/bindings/
   const discordWebhookUrl = context.env.DISCORD_WEBHOOK_URL;
+  const ADMIN_ID = "1168575437723680850";
 
-  // Get the message from the request body
   const { message } = await context.request.json();
 
   if (!discordWebhookUrl) {
@@ -15,11 +13,13 @@ export async function onRequest(context) {
     return new Response("Message is required", { status: 400 });
   }
 
+  const finalMessage = `<@${ADMIN_ID}> ${message}`;
+
   try {
     const res = await fetch(discordWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: message }),
+      body: JSON.stringify({ content: finalMessage }),
     });
 
     if (res.ok) {
