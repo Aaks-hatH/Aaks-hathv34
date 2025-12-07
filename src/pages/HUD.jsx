@@ -46,18 +46,34 @@ export default function HUD() {
   
   // Security State
   const [threatLevel, setThreatLevel] = useState('NORMAL'); 
-  const [panicMode, setPanicMode] = useState(false); // ESC Key
-  const [privacyMode, setPrivacyMode] = useState(false); // Shoulder Peeking
+  const [panicMode, setPanicMode] = useState(false); // Single ESC (Fake 404)
+  const [privacyMode, setPrivacyMode] = useState(false); // 'P' Key
+  const [terminated, setTerminated] = useState(false); // Double ESC (Kill Switch)
+  
+  // Ref for double-tap detection
+  const lastEscPress = useRef(0);
 
   // ---------------------------------------------------------
   // 1. KEYBOARD LISTENERS (ESC & P)
   // ---------------------------------------------------------
   useEffect(() => {
     const handleKeyDown = (e) => {
-        // PANIC SWITCH (ESC)
+        // KILL SWITCH / PANIC MODE (ESC)
         if (e.key === 'Escape') {
-            setPanicMode(prev => !prev);
+            const now = Date.now();
+            const timeSinceLast = now - lastEscPress.current;
+            
+            if (timeSinceLast < 300) {
+                // DOUBLE TAP DETECTED -> KILL SWITCH
+                setTerminated(true);
+                document.title = "Error"; // Change browser tab title
+            } else {
+                // SINGLE TAP -> FAKE 404
+                setPanicMode(prev => !prev);
+            }
+            lastEscPress.current = now;
         }
+
         // PRIVACY MODE (P)
         if (e.key === 'p' || e.key === 'P') {
             setPrivacyMode(prev => !prev);
@@ -87,12 +103,11 @@ export default function HUD() {
   };
 
   // ---------------------------------------------------------
-  // 3. DEVICE CHECK (IP CHECK REMOVED FOR ACCESS)
+  // 3. DEVICE CHECK
   // ---------------------------------------------------------
   useEffect(() => {
     const checkAccess = async () => {
         const ua = navigator.userAgent;
-        // Basic Device Check
         const isSafeDevice = ua.includes("CrOS") || ua.includes("Linux") || ua.includes("Mac") || ua.includes("Win");
         if (!isSafeDevice) {
             window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
@@ -121,7 +136,6 @@ export default function HUD() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     if(!auth) return;
 
-    // Heartbeat
     const sendHeartbeat = () => {
       fetch('/api/stream_keepalive', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -154,7 +168,22 @@ export default function HUD() {
   }, [auth, task]);
 
   // ---------------------------------------------------------
-  // PANIC MODE UI (Fake 404)
+  // KILL SWITCH UI (Double Tap ESC)
+  // ---------------------------------------------------------
+  if (terminated) {
+      return (
+        <div className="fixed inset-0 bg-black z-[99999] cursor-none flex flex-col items-start p-4 font-mono text-xs text-gray-600 select-none">
+            <p>KERNEL_PANIC: FORCE_SHUTDOWN_INITIATED_BY_USER</p>
+            <p>dumping physical memory to disk...</p>
+            <p>unmounting encrypted volumes...</p>
+            <p>clearing swap...</p>
+            <p>system halted.</p>
+        </div>
+      );
+  }
+
+  // ---------------------------------------------------------
+  // PANIC MODE UI (Single Tap ESC)
   // ---------------------------------------------------------
   if (panicMode) {
       return (
@@ -189,13 +218,11 @@ export default function HUD() {
   // ---------------------------------------------------------
   // MAIN HUD UI
   // ---------------------------------------------------------
-  // If Privacy Mode is ON, we add a blur class to specific elements
   const blurClass = privacyMode ? "blur-md opacity-50 transition-all duration-300" : "transition-all duration-300";
 
   return (
     <div className={`min-h-screen font-mono p-6 overflow-hidden flex flex-col transition-colors duration-300 ${threatLevel === 'CRITICAL' ? 'bg-red-950' : 'bg-black text-green-500'}`}>
       
-      {/* TOP BAR */}
       <div className={`flex justify-between items-end border-b pb-4 mb-6 ${threatLevel === 'CRITICAL' ? 'border-red-500' : 'border-green-900/50'}`}>
         <div>
             <h1 className={`text-4xl font-bold tracking-tighter ${threatLevel === 'CRITICAL' ? 'text-red-500 animate-pulse' : 'text-white'}`}>
@@ -207,7 +234,7 @@ export default function HUD() {
                 <span className="ml-4 opacity-50">WAKE_LOCK: ACTIVE</span>
                 <span className="ml-4 text-slate-500 flex items-center gap-1">
                     {privacyMode ? <EyeOff className="w-3 h-3"/> : <Eye className="w-3 h-3"/>}
-                    {privacyMode ? "PRIVACY: ON" : "PRIVACY: OFF"} (Press 'P')
+                    {privacyMode ? "PRIVACY: ON" : "PRIVACY: OFF"}
                 </span>
             </div>
         </div>
@@ -217,10 +244,7 @@ export default function HUD() {
         </div>
       </div>
 
-      {/* MAIN GRID */}
       <div className="grid grid-cols-3 gap-6 flex-1">
-        
-        {/* COL 1: CONTROLS */}
         <div className="col-span-1 space-y-6">
             <div className={`border p-4 ${threatLevel === 'CRITICAL' ? 'border-red-500 bg-red-900/20' : 'border-green-900 bg-green-950/5'}`}>
                 <h3 className="text-xs mb-2 flex items-center gap-2 opacity-70"><Activity className="w-4 h-4"/> CURRENT_OBJECTIVE</h3>
@@ -238,7 +262,6 @@ export default function HUD() {
             </div>
         </div>
 
-        {/* COL 2: SYSTEM STREAM */}
         <div className={`col-span-2 border p-4 bg-black relative overflow-hidden flex flex-col ${threatLevel === 'CRITICAL' ? 'border-red-500' : 'border-green-900'}`}>
             <h3 className="text-xs mb-4 flex items-center gap-2 opacity-70"><Terminal className="w-4 h-4"/> DATA_INTERCEPT</h3>
             
@@ -258,10 +281,8 @@ export default function HUD() {
                 <div className="animate-pulse">_</div>
             </div>
 
-            {/* Decorative Scanlines */}
             <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)50%,rgba(0,0,0,0.25)50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
         </div>
-
       </div>
     </div>
   );
