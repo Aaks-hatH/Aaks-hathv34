@@ -1,0 +1,101 @@
+# 🔐 SYSTEM ARCHITECTURE & CONTEXT: "Cyber Army Knife"
+
+## 1. PROJECT OVERVIEW
+**Type:** Offensive/Defensive Cybersecurity Portfolio & Admin Command Center.
+**Stack:** React (Vite) + Cloudflare Pages Functions (Backend) + Supabase (Realtime DB).
+**Core Philosophy:** "Security by Obscurity" (Renamed Endpoints) + "Zero Trust" (Backend Validation).
+
+---
+
+## 2. FILE OBFUSCATION MAP (CRITICAL)
+The backend files in `/functions/api/` are renamed to look like boring system processes. 
+**Do not create duplicate files. Use this map:**
+
+| Real Functionality | **Current Filename** | **Logic Flow** |
+| :--- | :--- | :--- |
+| **Admin Login** | `auth_handshake.js` | Turnstile Check -> Dead Man Check -> Password -> TOTP (2FA). |
+| **Lockdown/Commands** | `sys_config.js` | Verifies Admin Pwd -> Updates `system_config` table -> Alerts Discord. |
+| **HUD Heartbeat** | `stream_keepalive.js` | Updates `admin_status` table every 30s. |
+| **Visitor Logging** | `collect_telemetry.js` | WAF Checks (User-Agent/Signature) -> DB Insert -> Discord Webhook. |
+| **Get Visitor IP** | `geo_resolve.js` | Returns `CF-Connecting-IP` & Geo headers from Cloudflare. |
+| **HUD Access Check** | `client_verify.js` | Checks if visitor IP matches `ALLOWED_HUD_IP` env var. |
+| **Ban IP** | `net_block.js` | Adds IP to `banned_ips` -> Logs to Audit. |
+| **Unban IP** | `net_release.js` | Removes IP from `banned_ips`. |
+| **Delete Message** | `data_purge.js` | Removes entry from `guestbook`. |
+| **AI Tool Proxy** | `engine_a.js` | Rate Limit Check -> Proxies request to OpenAI API. |
+| **VirusTotal Proxy** | `engine_v.js` | Rate Limit Check -> Proxies request to VirusTotal API. |
+| **Honeypot Trap** | `user_auth.js` | Logs credentials to Discord/DB -> Returns Fake Error -> Delays response. |
+
+---
+
+## 3. DATABASE SCHEMA (Supabase PostgreSQL)
+
+### Table: `system_config`
+*Stores global states like Lockdown Mode and Rickroll commands.*
+- **Columns:** `key` (text, PK), `value` (text).
+- **Critical Setting:** `REPLICA IDENTITY FULL` is enabled (Required for Realtime payload delivery).
+- **RLS Policy:** Public (`anon`) can **SELECT** (Read). Only Backend (`service_role`) can **UPDATE**.
+
+### Table: `banned_ips`
+*Blacklist. If an IP exists here, `GlobalTracker.jsx` destroys the DOM.*
+- **Columns:** `ip` (text, PK), `reason` (text), `banned_at` (timestamp).
+- **RLS Policy:** Public (`anon`) can **SELECT** (to check if they are banned). Backend can **INSERT/DELETE**.
+
+### Table: `audit_logs`
+*Permanent history of all actions.*
+- **Columns:** `id`, `timestamp`, `actor_type` ('ADMIN', 'VISITOR', 'ATTACKER'), `ip`, `action`, `details`.
+- **RLS Policy:** Public can **SELECT** (for Admin UI). Inserts only via Backend API.
+
+### Table: `admin_status`
+*The Dead Man's Switch State.*
+- **Columns:** `id` (int, default 1), `is_online` (bool), `current_task` (text), `last_heartbeat` (timestamp).
+- **Logic:** Updated by `stream_keepalive.js`. Read by `auth_handshake.js` to allow/deny logins.
+
+### Table: `guestbook`
+*Public message board.*
+- **RLS Policy:** Public can **INSERT** and **SELECT**. Only Backend can **DELETE**.
+
+---
+
+## 4. SECURITY LOGIC & DEFENSE LAYERS
+
+### Layer 1: The WAF (Inside `collect_telemetry.js`)
+Before logging, the function checks:
+1.  **User-Agent:** Blocks `python`, `curl`, `evilbot`. Returns 403.
+2.  **Signatures:** Blocks JSON actions matching `DOS_SIMULATION` or `DDOS_FLOOD`. Returns 429.
+
+### Layer 2: The Dead Man's Switch
+- The Admin Login (`auth_handshake.js`) queries `admin_status`.
+- If `is_online` is `false` OR `last_heartbeat` is > 2 minutes old:
+- **Login is REJECTED** with `403 SECURITY LOCKOUT`.
+- This prevents login attempts even with the correct password if the Admin is not physically present at the HUD.
+
+### Layer 3: Rate Limiting
+- **Tools:** `engine_a.js` and `engine_v.js` query `audit_logs` to count usage in the last 60 seconds.
+- **Limit:** 3 requests/min for AI, 2 requests/min for VirusTotal.
+
+### Layer 4: Client-Side "Nuclear" Ban
+- `GlobalTracker.jsx` checks `banned_ips` on load.
+- If match found: It executes `document.body.innerHTML = ''` and injects a raw HTML "TERMINATED" screen.
+- React App is actively destroyed in memory.
+
+---
+
+## 5. ENVIRONMENT VARIABLES (Cloudflare)
+*These keys are injected at runtime.*
+- `ADMIN_PASSWORD` (String)
+- `ADMIN_TOTP_SECRET` (Base32 String for Google Auth)
+- `OPENAI_API_KEY` (sk-...)
+- `VIRUSTOTAL_API_KEY` (Hex string)
+- `SUPABASE_SERVICE_KEY` (The `service_role` JWT - **Critical for Backend Writes**)
+- `DISCORD_WEBHOOK_URL` (For alerts)
+- `TURNSTILE_SECRET_KEY` (For Captcha verification)
+- `ALLOWED_HUD_IP` (Optional IP lock for HUD)
+
+---
+
+## 6. INSTRUCTIONS FOR AI CODING
+1.  **Never expose secrets:** Always use `context.env.KEY_NAME` in backend functions.
+2.  **Preserve Realtime:** Do not remove `REPLICA IDENTITY FULL` notes or `supabase.channel` subscriptions.
+3.  **Respect Obfuscation:** If adding a new tool, suggest a boring filename (e.g., `audit_daemon.js`) instead of `hack-tool.js`.
+4.  **Deployment:** Code changes must be built (`npm run build`), functions copied to root (`functions/`), and deployed via Wrangler.
