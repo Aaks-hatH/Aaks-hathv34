@@ -1,27 +1,28 @@
 export async function onRequest(context) {
-  // 1. Handle CORS
+  // Handle CORS
   if (context.request.method === "OPTIONS") {
-    return new Response(null, { 
-      headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS" } 
-    });
+    return new Response(null, { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS" } });
   }
 
   const clientIP = context.request.headers.get("CF-Connecting-IP");
-  const allowedEnv = context.env.ALLOWED_HUD_IP; // Expecting "IP1, IP2, IP3"
+  const allowedEnv = context.env.ALLOWED_HUD_IP;
 
-  // If no IP is set in Cloudflare, we allow it (Fallback to prevent lockout)
+  // 1. If variable is missing, OPEN ACCESS (Prevent lockout)
   if (!allowedEnv) {
-    return new Response("OK - No Whitelist Set", { status: 200 });
+    return new Response(JSON.stringify({ status: "Open", ip: clientIP }), { status: 200 });
   }
 
-  // 2. Parse the List
-  // Split by comma and remove spaces (e.g., "1.1.1.1, 2.2.2.2" -> ["1.1.1.1", "2.2.2.2"])
+  // 2. Parse List (Handle commas, spaces, and newlines)
   const allowedList = allowedEnv.split(',').map(ip => ip.trim());
 
-  // 3. Check Access
+  // 3. Check
   if (allowedList.includes(clientIP)) {
     return new Response("OK", { status: 200 });
   } else {
-    return new Response(`Forbidden: Your IP (${clientIP}) is not whitelisted.`, { status: 403 });
+    // Return the IP so you can see it in Network Tab debug
+    return new Response(JSON.stringify({ error: "Forbidden", your_ip: clientIP }), { 
+        status: 403,
+        headers: { "Content-Type": "application/json" }
+    });
   }
 }
