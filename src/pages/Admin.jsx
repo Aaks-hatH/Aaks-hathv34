@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { base44, supabase } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
+import { Turnstile } from '@marsidev/react-turnstile';
 import { 
   Trash2, LogOut, ShieldAlert, Radio, Loader2, 
   Megaphone, RefreshCw, Ban, Terminal as TermIcon, 
@@ -12,6 +13,7 @@ export default function Admin() {
   const [auth, setAuth] = useState(false);
   const [password, setPassword] = useState('');
   const [totp, setTotp] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState(''); // <--- CAPTCHA STATE
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -50,10 +52,10 @@ export default function Admin() {
   useEffect(() => {
     if (!auth) return;
 
-    // Database Changes (Listen to EVERYTHING)
+    // Database Changes
     const dbChannel = supabase.channel('admin-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        refreshAll(); // Reload tables if any data changes
+        refreshAll(); 
       })
       .subscribe();
 
@@ -77,14 +79,25 @@ export default function Admin() {
   // --- 3. LOGIN HANDLER ---
   const handleLogin = async (e) => {
     e.preventDefault();
+    
+    // CAPTCHA CHECK
+    if (!turnstileToken) {
+        setError("ANTI-BOT CHECK REQUIRED");
+        return;
+    }
+
     setLoading(true);
     setError('');
     try {
-      // Endpoint: auth_handshake (Renamed from verify-admin)
+      // Endpoint: auth_handshake
       const res = await fetch('/api/auth_handshake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, token: totp })
+        body: JSON.stringify({ 
+            password, 
+            token: totp,
+            captcha: turnstileToken // <--- SEND TOKEN
+        })
       });
       const data = await res.json();
       
@@ -92,8 +105,10 @@ export default function Admin() {
         setAuth(true);
       } else {
         setError(data.error || 'FAILED'); 
+        // Clear inputs on specific errors
         if(data.error === 'PASSWORD_INCORRECT') setPassword('');
         if(data.error === '2FA_CODE_INVALID') setTotp('');
+        // Force captcha reset on failure if needed (optional)
       }
     } catch (err) { setError('CONNECTION_ERROR'); } 
     finally { setLoading(false); }
@@ -103,9 +118,7 @@ export default function Admin() {
 
   const toggleMaintenance = async () => {
     const newState = !maintenance;
-    setMaintenance(newState); // Optimistic Update
-    
-    // Endpoint: sys_config (Renamed from toggle-lockdown)
+    setMaintenance(newState); 
     await fetch('/api/sys_config', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, key: 'maintenance_mode', value: String(newState) })
@@ -130,7 +143,6 @@ export default function Admin() {
 
   const banUser = async (ip) => {
     if(!confirm(`BAN IP: ${ip}?`)) return;
-    // Endpoint: net_block (Renamed from ban-target)
     await fetch('/api/net_block', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, ip, reason: "Admin Manual Ban" })
@@ -139,7 +151,6 @@ export default function Admin() {
   };
 
   const unbanUser = async (ip) => {
-    // Endpoint: net_release (Renamed from unban-target)
     await fetch('/api/net_release', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, ip })
@@ -148,10 +159,7 @@ export default function Admin() {
 
   const handleDelete = async (id) => {
     if(!confirm("DELETE RECORD?")) return;
-    // Optimistic UI update
     setMessages(prev => prev.filter(m => m.id !== id));
-    
-    // Endpoint: data_purge (Renamed from delete-message)
     await fetch('/api/data_purge', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password, id })
@@ -186,6 +194,16 @@ export default function Admin() {
                 <label className="text-[10px] uppercase text-slate-600">Auth Token</label>
                 <input type="text" value={totp} onChange={e=>setTotp(e.target.value)} maxLength={6} className="w-full bg-black border border-slate-700 p-2 text-white tracking-widest focus:border-cyan-500 outline-none" placeholder="000000" />
             </div>
+
+            {/* CAPTCHA WIDGET */}
+            <div className="flex justify-center my-2">
+                <Turnstile 
+                    siteKey="0x4AAAAAACFDgNVZZRDkdRXG" 
+                    onSuccess={(token) => setTurnstileToken(token)}
+                    options={{ theme: 'dark' }}
+                />
+            </div>
+
             {error && <div className="text-red-500 text-xs bg-red-950/20 p-2 border-l-2 border-red-500">ERROR: {error}</div>}
             <button type="submit" disabled={loading} className="w-full bg-slate-100 text-black py-2 text-xs font-bold hover:bg-cyan-500 hover:text-white transition-colors">
               {loading ? "HANDSHAKING..." : "ACCESS"}
@@ -201,29 +219,18 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-black text-slate-300 font-mono p-6">
       <div className="max-w-6xl mx-auto">
-        
-        {/* TOP BAR */}
         <header className="flex justify-between items-center mb-8 border-b border-slate-800 pb-6">
-          <div>
-            <h1 className="text-xl text-white tracking-widest">OVERWATCH_CONSOLE</h1>
-            <div className="flex items-center gap-4 text-xs mt-1">
-                <span className="text-cyan-600">AGENTS: {Object.keys(visitors).length}</span>
-                <span className={maintenance ? "text-red-500 animate-pulse" : "text-green-600"}>
-                    SYSTEM: {maintenance ? "LOCKDOWN" : "NOMINAL"}
-                </span>
-            </div>
-          </div>
+          <div><h1 className="text-xl text-white tracking-widest">OVERWATCH_CONSOLE</h1><p className="text-xs text-cyan-600">ACTIVE_AGENTS: {Object.keys(visitors).length}</p></div>
           <button onClick={() => setAuth(false)} className="text-xs text-red-500 border border-red-900 px-3 py-1 hover:bg-red-900 hover:text-white transition-colors">[ DISCONNECT ]</button>
         </header>
 
-        {/* NAVIGATION */}
         <div className="grid grid-cols-5 gap-1 mb-8">
           {['LIVE_TRAFFIC', 'SECURITY_LOGS', 'NETWORK_OPS', 'DATABASE', 'AUDIT_LOGS'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`py-2 text-[10px] md:text-xs font-bold transition-all ${activeTab===tab ? 'bg-slate-100 text-black' : 'bg-slate-900 hover:bg-slate-800 text-slate-500'}`}>{tab}</button>
           ))}
         </div>
 
-        {/* TAB: LIVE TRAFFIC */}
+        {/* LIVE TRAFFIC */}
         {activeTab === 'LIVE_TRAFFIC' && (
           <div className="border border-slate-800 bg-slate-950 min-h-[300px]">
             <div className="p-2 border-b border-slate-800 bg-slate-900/50 text-xs text-slate-500 flex justify-between">
@@ -254,7 +261,7 @@ export default function Admin() {
           </div>
         )}
 
-        {/* TAB: SECURITY LOGS */}
+        {/* SECURITY LOGS */}
         {activeTab === 'SECURITY_LOGS' && (
             <div className="border border-slate-800 bg-slate-950 h-[500px] overflow-y-auto custom-scrollbar">
                 <div className="p-3 bg-red-950/20 text-red-500 text-xs font-bold border-b border-slate-800 flex items-center gap-2 sticky top-0 backdrop-blur-md">
@@ -275,7 +282,7 @@ export default function Admin() {
             </div>
         )}
 
-        {/* TAB: NETWORK OPS */}
+        {/* NETWORK OPS */}
         {activeTab === 'NETWORK_OPS' && (
           <div className="grid md:grid-cols-2 gap-8">
             <div className="border border-slate-800 p-6 bg-slate-950">
