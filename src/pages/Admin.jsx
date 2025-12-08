@@ -247,35 +247,38 @@ export default function Admin() {
           <div className="space-y-6">
             
             {/* --- MAP SECTION --- */}
-            <div className="h-[400px] border border-slate-800 bg-slate-950 rounded overflow-hidden relative z-0">
-               <div className="absolute top-2 left-2 z-[9999] bg-slate-900/80 p-2 border border-slate-700 text-xs text-green-400 rounded">
-                 WAR_ROOM VIEW
-               </div>
-               {/* KEY PROP FORCES RE-RENDER ON TAB SWITCH */}
-               <MapContainer key={activeTab} center={[20, 0]} zoom={2} className="h-full w-full bg-slate-950">
-                  {/* Dark Matter Tiles */}
-                  <TileLayer 
-                    attribution='&copy; CARTO'
-                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
-                  />
-                  {Object.values(visitors).map((v) => {
-                    const u = v[0];
-                    // SAFETY CHECK FOR COORDS
-                    if (!u.coords || typeof u.coords !== 'string' || !u.coords.includes(',')) return null;
-                    const [lat, lon] = u.coords.split(',').map(Number);
-                    
-                    return (
-                      <Marker key={u.id} position={[lat, lon]} icon={customMarkerIcon}>
-                         <Popup className="font-mono text-xs text-black">
-                           <div className="font-bold">{u.ip}</div>
-                           <div>{u.geo}</div>
-                           <div className="text-[10px] text-slate-500">{u.path}</div>
-                         </Popup>
-                      </Marker>
-                    );
-                  })}
-               </MapContainer>
-            </div>
+            <div className="border border-slate-800 bg-slate-950 rounded overflow-hidden relative z-0 mb-6">
+   <div className="absolute top-2 left-2 z-[400] bg-slate-900/80 p-2 border border-slate-700 text-xs text-green-400 rounded">
+     WAR_ROOM VIEW
+   </div>
+   
+   {/* FORCE HEIGHT HERE with style={{ height: '400px' }} */}
+   <MapContainer 
+     key={activeTab} 
+     center={[20, 0]} 
+     zoom={2} 
+     style={{ height: '400px', width: '100%', background: '#020617' }} 
+   >
+      <TileLayer 
+        attribution='&copy; CARTO'
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
+      />
+      {Object.values(visitors).map((v) => {
+        const u = v[0];
+        if (!u.coords || typeof u.coords !== 'string' || !u.coords.includes(',')) return null;
+        const [lat, lon] = u.coords.split(',').map(Number);
+        
+        return (
+          <Marker key={u.id} position={[lat, lon]} icon={customMarkerIcon}>
+             <Popup className="font-mono text-xs text-black">
+               <div className="font-bold">{u.ip}</div>
+               <div>{u.geo}</div>
+             </Popup>
+          </Marker>
+        );
+      })}
+   </MapContainer>
+</div>
 
             {/* --- TABLE SECTION --- */}
             <div className="border border-slate-800 bg-slate-950 min-h-[300px]">
