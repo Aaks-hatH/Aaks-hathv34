@@ -60,11 +60,20 @@ export default function Admin() {
       .subscribe();
 
     // Live Visitor Tracking
+    // We use a separate channel name to ensure clean state
     const presenceChannel = supabase.channel('online-users');
+
     presenceChannel
       .on('presence', { event: 'sync' }, () => {
         const state = presenceChannel.presenceState();
+        // console.log("SYNC STATE:", state); // Uncomment to debug in console
         setVisitors(state);
+      })
+      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        // console.log("JOIN:", key, newPresences);
+      })
+      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+        // console.log("LEAVE:", key, leftPresences);
       })
       .subscribe();
 
