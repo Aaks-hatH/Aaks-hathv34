@@ -8,12 +8,27 @@ import {
   Globe, MapPin, Unlock, FileText, Activity 
 } from 'lucide-react';
 
+// --- LEAFLET IMPORTS ---
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+// --- FIX: CUSTOM MARKER ICON (Prevents Broken Image Glitch) ---
+const customMarkerIcon = new L.DivIcon({
+  html: renderToStaticMarkup(<MapPin className="w-6 h-6 text-cyan-500 drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" fill="currentColor" />),
+  className: 'bg-transparent border-none',
+  iconSize: [24, 24],
+  iconAnchor: [12, 24],
+  popupAnchor: [0, -24]
+});
+
 export default function Admin() {
   // --- STATE MANAGEMENT ---
   const [auth, setAuth] = useState(false);
   const [password, setPassword] = useState('');
   const [totp, setTotp] = useState('');
-  const [turnstileToken, setTurnstileToken] = useState(''); // <--- CAPTCHA STATE
+  const [turnstileToken, setTurnstileToken] = useState(''); 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -60,20 +75,12 @@ export default function Admin() {
       .subscribe();
 
     // Live Visitor Tracking
-    // We use a separate channel name to ensure clean state
     const presenceChannel = supabase.channel('online-users');
 
     presenceChannel
       .on('presence', { event: 'sync' }, () => {
         const state = presenceChannel.presenceState();
-        // console.log("SYNC STATE:", state); // Uncomment to debug in console
         setVisitors(state);
-      })
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        // console.log("JOIN:", key, newPresences);
-      })
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        // console.log("LEAVE:", key, leftPresences);
       })
       .subscribe();
 
@@ -89,7 +96,6 @@ export default function Admin() {
   const handleLogin = async (e) => {
     e.preventDefault();
     
-    // CAPTCHA CHECK
     if (!turnstileToken) {
         setError("ANTI-BOT CHECK REQUIRED");
         return;
@@ -98,14 +104,13 @@ export default function Admin() {
     setLoading(true);
     setError('');
     try {
-      // Endpoint: auth_handshake
       const res = await fetch('/api/auth_handshake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             password, 
             token: totp,
-            captcha: turnstileToken // <--- SEND TOKEN
+            captcha: turnstileToken
         })
       });
       const data = await res.json();
@@ -114,10 +119,8 @@ export default function Admin() {
         setAuth(true);
       } else {
         setError(data.error || 'FAILED'); 
-        // Clear inputs on specific errors
         if(data.error === 'PASSWORD_INCORRECT') setPassword('');
         if(data.error === '2FA_CODE_INVALID') setTotp('');
-        // Force captcha reset on failure if needed (optional)
       }
     } catch (err) { setError('CONNECTION_ERROR'); } 
     finally { setLoading(false); }
@@ -241,32 +244,67 @@ export default function Admin() {
 
         {/* LIVE TRAFFIC */}
         {activeTab === 'LIVE_TRAFFIC' && (
-          <div className="border border-slate-800 bg-slate-950 min-h-[300px]">
-            <div className="p-2 border-b border-slate-800 bg-slate-900/50 text-xs text-slate-500 flex justify-between">
-                <span>SIGNAL_INTERCEPT</span>
-                <Activity className="w-3 h-3 text-green-500 animate-pulse" />
-            </div>
-            <table className="w-full text-left text-xs text-slate-400">
-              <thead><tr className="border-b border-slate-800"><th className="p-3">IP / LOC</th><th className="p-3">PATH</th><th className="p-3">DEVICE</th><th className="p-3 text-right">ACT</th></tr></thead>
-              <tbody>
-                {Object.values(visitors).map(v => {
+          <div className="space-y-6">
+            
+            {/* --- MAP SECTION --- */}
+            <div className="h-[400px] border border-slate-800 bg-slate-950 rounded overflow-hidden relative z-0">
+               <div className="absolute top-2 left-2 z-[9999] bg-slate-900/80 p-2 border border-slate-700 text-xs text-green-400 rounded">
+                 WAR_ROOM VIEW
+               </div>
+               {/* KEY PROP FORCES RE-RENDER ON TAB SWITCH */}
+               <MapContainer key={activeTab} center={[20, 0]} zoom={2} className="h-full w-full bg-slate-950">
+                  {/* Dark Matter Tiles */}
+                  <TileLayer 
+                    attribution='&copy; CARTO'
+                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" 
+                  />
+                  {Object.values(visitors).map((v) => {
                     const u = v[0];
-                    const isBanned = bannedIps.some(b => b.ip === u.ip);
+                    // SAFETY CHECK FOR COORDS
+                    if (!u.coords || typeof u.coords !== 'string' || !u.coords.includes(',')) return null;
+                    const [lat, lon] = u.coords.split(',').map(Number);
+                    
                     return (
-                        <tr key={u.id} className="hover:bg-slate-900/50 transition-colors border-b border-slate-900">
-                            <td className="p-3"><div className="text-cyan-500 font-bold mb-1">{u.ip || 'Hidden'}</div><div className="text-slate-600 flex items-center gap-1"><MapPin className="w-3 h-3"/> {u.geo || 'Unknown'}</div></td>
-                            <td className="p-3 text-white">{u.path}</td>
-                            <td className="p-3 text-slate-500 truncate max-w-[150px]">{u.ua}</td>
-                            <td className="p-3 text-right">
-                                {isBanned ? <span className="text-red-500 font-bold text-[10px]">BANNED</span> : 
-                                <button onClick={() => banUser(u.ip)} className="text-red-500 border border-red-900 px-2 py-1 hover:bg-red-600 hover:text-white text-[10px] transition-colors">[ BAN ]</button>}
-                            </td>
-                        </tr>
+                      <Marker key={u.id} position={[lat, lon]} icon={customMarkerIcon}>
+                         <Popup className="font-mono text-xs text-black">
+                           <div className="font-bold">{u.ip}</div>
+                           <div>{u.geo}</div>
+                           <div className="text-[10px] text-slate-500">{u.path}</div>
+                         </Popup>
+                      </Marker>
                     );
-                })}
-              </tbody>
-            </table>
-            {Object.keys(visitors).length === 0 && <div className="p-12 text-center text-slate-700 text-xs">NO_ACTIVE_SIGNALS</div>}
+                  })}
+               </MapContainer>
+            </div>
+
+            {/* --- TABLE SECTION --- */}
+            <div className="border border-slate-800 bg-slate-950 min-h-[300px]">
+              <div className="p-2 border-b border-slate-800 bg-slate-900/50 text-xs text-slate-500 flex justify-between">
+                  <span>SIGNAL_INTERCEPT</span>
+                  <Activity className="w-3 h-3 text-green-500 animate-pulse" />
+              </div>
+              <table className="w-full text-left text-xs text-slate-400">
+                <thead><tr className="border-b border-slate-800"><th className="p-3">IP / LOC</th><th className="p-3">PATH</th><th className="p-3">DEVICE</th><th className="p-3 text-right">ACT</th></tr></thead>
+                <tbody>
+                  {Object.values(visitors).map(v => {
+                      const u = v[0];
+                      const isBanned = bannedIps.some(b => b.ip === u.ip);
+                      return (
+                          <tr key={u.id} className="hover:bg-slate-900/50 transition-colors border-b border-slate-900">
+                              <td className="p-3"><div className="text-cyan-500 font-bold mb-1">{u.ip || 'Hidden'}</div><div className="text-slate-600 flex items-center gap-1"><MapPin className="w-3 h-3"/> {u.geo || 'Unknown'}</div></td>
+                              <td className="p-3 text-white">{u.path}</td>
+                              <td className="p-3 text-slate-500 truncate max-w-[150px]">{u.ua}</td>
+                              <td className="p-3 text-right">
+                                  {isBanned ? <span className="text-red-500 font-bold text-[10px]">BANNED</span> : 
+                                  <button onClick={() => banUser(u.ip)} className="text-red-500 border border-red-900 px-2 py-1 hover:bg-red-600 hover:text-white text-[10px] transition-colors">[ BAN ]</button>}
+                              </td>
+                          </tr>
+                      );
+                  })}
+                </tbody>
+              </table>
+              {Object.keys(visitors).length === 0 && <div className="p-12 text-center text-slate-700 text-xs">NO_ACTIVE_SIGNALS</div>}
+            </div>
           </div>
         )}
 
@@ -372,4 +410,149 @@ export default function Admin() {
       </div>
     </div>
   );
+}
+
+// ----------------------------------------------------------------------
+
+// 2. GLOBAL TRACKER (Ensure Coords are transmitted)
+// ----------------------------------------------------------------------
+--- START OF FILE GlobalTracker.jsx ---
+
+import React, { useEffect, useState, useRef } from 'react';
+import { supabase } from '@/api/base44Client';
+import { useLocation } from 'react-router-dom';
+import { ShieldAlert, Info, Ban } from 'lucide-react';
+
+export default function GlobalTracker() {
+  const location = useLocation();
+  const [locked, setLocked] = useState(false);
+  const [banned, setBanned] = useState(false);
+  const [broadcast, setBroadcast] = useState('');
+  
+  // State for identity
+  const [ipInfo, setIpInfo] = useState({ ip: 'Scanning...', geo: '---', coords: '0,0' });
+  // Persistent ID for this session
+  const [guestId] = useState(() => `GUEST-${Math.floor(Math.random() * 10000)}`);
+  
+  // Ref to track channel subscription to prevent duplicates
+  const channelRef = useRef(null);
+
+  // 1. IP DETECTION (Run once on mount)
+  useEffect(() => {
+    const getIdentity = async () => {
+      try {
+        const res = await fetch('/api/geo_resolve');
+        if (res.ok) {
+            const data = await res.json();
+            setIpInfo(data); // This triggers the tracking update below
+            
+            // Check Ban Status
+            const { data: banData } = await supabase
+                .from('banned_ips')
+                .select('*')
+                .eq('ip', data.ip)
+                .maybeSingle();
+            if (banData) setBanned(true);
+        } else {
+            setIpInfo({ ip: 'Hidden (VPN)', geo: 'Unknown', coords: '0,0' });
+        }
+
+        // Log Page View
+        if (!window.location.pathname.includes('/admin')) {
+            fetch('/api/collect_telemetry', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actor_type: 'VISITOR', action: 'PAGE_VIEW', details: window.location.pathname })
+            }).catch(() => {}); 
+        }
+      } catch (e) {
+        setIpInfo({ ip: 'Error', geo: 'Unknown', coords: '0,0' });
+      }
+    };
+    getIdentity();
+  }, []);
+
+  // 2. LIVE PRESENCE
+  useEffect(() => {
+     // Clean up previous channel if it exists (to prevent duplicates)
+     if (channelRef.current) supabase.removeChannel(channelRef.current);
+
+     const channel = supabase.channel('online-users', { 
+        config: { presence: { key: guestId } } 
+     });
+     
+     channelRef.current = channel;
+
+     channel.subscribe(async (status) => {
+         if (status === 'SUBSCRIBED') {
+             // Send data immediately
+             await channel.track({ 
+                 id: guestId, 
+                 path: location.pathname, 
+                 ua: navigator.userAgent, 
+                 ip: ipInfo.ip, 
+                 geo: ipInfo.geo,
+                 coords: ipInfo.coords || '0,0', // CRITICAL: Ensures coords are sent
+                 timestamp: new Date().toISOString() 
+             });
+         }
+     });
+
+     return () => { supabase.removeChannel(channel); };
+  }, [location.pathname, ipInfo]); // Re-sends data if Path OR IP changes
+
+  // 3. COMMAND LISTENER
+  useEffect(() => {
+    // Initial check
+    supabase.from('system_config').select('value').eq('key', 'maintenance_mode').maybeSingle()
+      .then(({ data }) => { if (data?.value === 'true') setLocked(true); });
+
+    const sysSub = supabase.channel('system-events')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, (payload) => {
+        if (!payload.new) return;
+        const { key, value } = payload.new;
+
+        if (key === 'maintenance_mode') setLocked(value === 'true');
+        if (key === 'system_broadcast') { setBroadcast(value); setTimeout(() => setBroadcast(''), 10000); }
+        if (key === 'system_command') {
+            const cmd = value.split('|')[0];
+            if (cmd === 'RICKROLL') window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+            if (cmd === 'RELOAD') window.location.reload();
+            if (cmd.startsWith('ALERT:')) alert(cmd.split('ALERT:')[1]);
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'banned_ips' }, (payload) => {
+         if (payload.new && payload.new.ip === ipInfo.ip) setBanned(true);
+         if (payload.eventType === 'DELETE' && payload.old && payload.old.ip === ipInfo.ip) setBanned(false);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(sysSub); };
+  }, [ipInfo.ip]);
+
+  // --- UI ---
+  if (banned) return (
+      <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center text-red-600 font-mono p-4">
+         <Ban className="w-24 h-24 mb-4 animate-pulse" />
+         <h1 className="text-3xl font-bold text-center">ACCESS DENIED</h1>
+         <p className="mt-2 text-sm text-red-400">IP BLACKLISTED</p>
+      </div>
+  );
+
+  if (locked && !location.pathname.includes('/admin')) return (
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center text-red-600 font-mono p-4">
+       <ShieldAlert className="w-24 h-24 mb-4 animate-pulse" />
+       <h1 className="text-4xl font-bold text-center tracking-widest">SYSTEM LOCKDOWN</h1>
+    </div>
+  );
+
+  if (broadcast) return (
+    <div className="fixed top-4 right-4 z-[9999] animate-in slide-in-from-top-5 fade-in">
+      <div className="bg-slate-900 border border-cyan-500 text-cyan-400 p-4 rounded shadow-lg flex items-center gap-3 max-w-sm">
+        <Info className="w-5 h-5 shrink-0" />
+        <div><h3 className="font-bold text-sm mb-1">ADMIN MESSAGE</h3><p className="text-xs text-slate-300 font-mono">{broadcast}</p></div>
+      </div>
+    </div>
+  );
+
+  return null;
 }
