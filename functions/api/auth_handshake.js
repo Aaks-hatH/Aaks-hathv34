@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 const ADMIN_ID = "1168575437723680850";
 
 export async function onRequestPost(context) {
+  // Handle CORS
   if (context.request.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } });
   
   try {
@@ -28,7 +29,7 @@ export async function onRequestPost(context) {
         }
     };
 
-    // 1. CAPTCHA
+    // 1. CAPTCHA CHECK
     if (turnstileSecret) {
         if (!captcha) return new Response(JSON.stringify({ error: "CAPTCHA_REQUIRED" }), { status: 400 });
         const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
@@ -39,24 +40,38 @@ export async function onRequestPost(context) {
         if (!d.success) return new Response(JSON.stringify({ error: "CAPTCHA_FAILED" }), { status: 403 });
     }
 
-    // 2. DEAD MAN
+    // 2. DEAD MAN'S SWITCH (UPDATED LOGIC)
     if (sbKey) {
         const supabase = createClient('https://gdlvzfyvgmeyvlcgggix.supabase.co', sbKey);
-        const { data: status } = await supabase.from('admin_status').select('is_online').eq('id', 1).single();
-        if (!status || status.is_online !== true) {
-             sendAlert(`<@${ADMIN_ID}>\n**Security Block:** Login attempted while Admin HUD is offline.\n**IP:** ${clientIP} (${country})`);
+        
+        // Fetch status AND timestamp
+        const { data: status } = await supabase
+            .from('admin_status')
+            .select('is_online, last_heartbeat')
+            .eq('id', 1)
+            .single();
+
+        // Calculate time difference
+        const now = new Date();
+        const lastBeat = new Date(status?.last_heartbeat || 0);
+        const diffSeconds = (now - lastBeat) / 1000;
+        const TIMEOUT_LIMIT = 120; // 2 Minutes
+
+        // CHECK: Is status explicitly offline OR is the heartbeat too old?
+        if (!status || status.is_online !== true || diffSeconds > TIMEOUT_LIMIT) {
+             sendAlert(`<@${ADMIN_ID}>\n**Security Block:** Login attempted while Admin HUD is offline (or heartbeat stale).\n**Time since pulse:** ${Math.floor(diffSeconds)}s\n**IP:** ${clientIP} (${country})`);
              return new Response(JSON.stringify({ error: "SECURITY LOCKOUT: HUD OFFLINE" }), { status: 403 });
         }
     }
 
-    // 3. PASSWORD
+    // 3. PASSWORD CHECK
     if (password !== actualPassword) {
        sendAlert(`<@${ADMIN_ID}>\n**Critical Alert:** Failed login attempt (Invalid Password).\n**Source:** ${clientIP} (${country})`);
-       await new Promise(r => setTimeout(r, 2000));
+       await new Promise(r => setTimeout(r, 2000)); // Artificial Delay
        return new Response(JSON.stringify({ error: "PASSWORD_INCORRECT" }), { status: 401 });
     }
 
-    // 4. 2FA
+    // 4. 2FA CHECK
     if (totpSecret) {
         const totp = new OTPAuth.TOTP({ algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(totpSecret) });
         const delta = totp.validate({ token: token, window: 2 });
