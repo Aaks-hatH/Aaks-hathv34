@@ -65,24 +65,30 @@ export default function Admin() {
   };
 
   // --- 2. REALTIME LISTENERS ---
+  // --- 2. REALTIME LISTENERS ---
   useEffect(() => {
     if (!auth) return;
 
-    // Database Changes
+    // Database Changes (Logs, Config, etc)
     const dbChannel = supabase.channel('admin-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
         refreshAll(); 
       })
       .subscribe();
 
-    // Live Visitor Tracking
+    // Live Visitor Tracking (THE FIX)
     const presenceChannel = supabase.channel('online-users');
 
-    presenceChannel
-      .on('presence', { event: 'sync' }, () => {
+    // Helper to update state and FORCE React to re-render by creating a new object
+    const updateVisitors = () => {
         const state = presenceChannel.presenceState();
-        setVisitors(state);
-      })
+        setVisitors({ ...state }); // The spread {...state} forces a re-render
+    };
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, updateVisitors)
+      .on('presence', { event: 'join' }, updateVisitors)  // Update immediately when someone joins
+      .on('presence', { event: 'leave' }, updateVisitors) // Update immediately when someone leaves
       .subscribe();
 
     refreshAll();
