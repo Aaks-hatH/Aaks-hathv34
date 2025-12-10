@@ -3,20 +3,46 @@ import { createClient } from '@supabase/supabase-js';
 
 const ADMIN_ID = "1168575437723680850";
 
+// Helper: Send Email via EmailJS
+async function sendEmailAlert(context, subject, message) {
+  const serviceId = context.env.EMAILJS_SERVICE_ID;
+  const templateId = context.env.EMAILJS_TEMPLATE_ID;
+  const userId = context.env.EMAILJS_USER_ID;
+  const accessToken = context.env.EMAILJS_ACCESS_TOKEN;
+
+  if (!serviceId || !accessToken) return;
+
+  const payload = {
+    service_id: serviceId,
+    template_id: templateId,
+    user_id: userId,
+    accessToken: accessToken,
+    template_params: {
+      subject: subject,
+      message: message,
+      to_email: 'aakshathariharan@gmail.com'
+    }
+  };
+
+  await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function onRequestPost(context) {
   if (context.request.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } });
   
   try {
     const { password, token, captcha, stepUpCode } = await context.request.json();
     
-    // Secrets
     const actualPassword = (context.env.ADMIN_PASSWORD || "").trim();
     const totpSecret = (context.env.ADMIN_TOTP_SECRET || "").replace(/\s/g, '');
     const webhookUrl = context.env.DISCORD_WEBHOOK_URL;
     const turnstileSecret = context.env.TURNSTILE_SECRET_KEY;
     const sbKey = context.env.SUPABASE_SERVICE_KEY;
     
-    // Metadata
     const clientIP = context.request.headers.get("CF-Connecting-IP") || "Unknown";
     const country = context.request.headers.get("CF-IPCountry") || "XX";
 
@@ -31,13 +57,8 @@ export async function onRequestPost(context) {
 
     const supabase = createClient('https://gdlvzfyvgmeyvlcgggix.supabase.co', sbKey);
 
-    // ==========================================================
-    // 🛡️ PHASE 1: AUTO-BAN CHECK (The Wall)
-    // ==========================================================
-    
+    // 1. AUTO-BAN CHECK
     const fifteenMinsAgo = new Date(Date.now() - 15 * 60000).toISOString();
-    
-    // Check Failure Count
     const { count: failCount } = await supabase
         .from('audit_logs')
         .select('*', { count: 'exact', head: true })
@@ -45,24 +66,25 @@ export async function onRequestPost(context) {
         .eq('action', 'LOGIN_FAIL')
         .gte('timestamp', fifteenMinsAgo);
 
-    // 🛑 THRESHOLD: 5 Failures = AUTO BAN
     if (failCount >= 5) {
-        // Double check if already banned to avoid log spam
         const { data: isBanned } = await supabase.from('banned_ips').select('ip').eq('ip', clientIP).maybeSingle();
-        
         if (!isBanned) {
-            await supabase.from('banned_ips').insert({ ip: clientIP, reason: "Auto-Ban: Brute Force (5+ Fails)" });
+            await supabase.from('banned_ips').insert({ ip: clientIP, reason: "Auto-Ban: Brute Force" });
             await supabase.from('audit_logs').insert({ actor_type: 'ATTACKER', ip: clientIP, action: 'AUTO_BAN', details: 'Threshold Exceeded' });
-            sendAlert(`<@${ADMIN_ID}>\n**🚨 AUTO-BAN EXECUTED**\n**Reason:** Brute Force (${failCount} fails)\n**Target:** ${clientIP} (${country})`);
+            
+            sendAlert(`<@${ADMIN_ID}>\n**🚨 AUTO-BAN**\nTarget: ${clientIP}`);
+            
+            // SEND EMAIL ALERT
+            context.waitUntil(sendEmailAlert(
+                context, 
+                "CRITICAL SECURITY ALERT: Auto-Ban Executed", 
+                `Target IP: ${clientIP} (${country}) has been banned due to repeated login failures.`
+            ));
         }
         return new Response(JSON.stringify({ error: "ACCESS DENIED: IP BANNED" }), { status: 403 });
     }
 
-    // ==========================================================
-    // 🔐 PHASE 2: STANDARD CHECKS
-    // ==========================================================
-
-    // 1. CAPTCHA
+    // 2. CAPTCHA
     if (turnstileSecret) {
         if (!captcha) return new Response(JSON.stringify({ error: "CAPTCHA_REQUIRED" }), { status: 400 });
         const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
@@ -73,68 +95,45 @@ export async function onRequestPost(context) {
         if (!d.success) return new Response(JSON.stringify({ error: "CAPTCHA_FAILED" }), { status: 403 });
     }
 
-    // 2. DEAD MAN'S SWITCH
+    // 3. DEAD MAN CHECK
     const { data: status } = await supabase.from('admin_status').select('is_online, last_heartbeat').eq('id', 1).single();
     const now = new Date();
     const lastBeat = new Date(status?.last_heartbeat || 0);
     const diffSeconds = (now - lastBeat) / 1000;
 
     if (!status || status.is_online !== true || diffSeconds > 120) {
-         sendAlert(`<@${ADMIN_ID}>\n**Security Block:** HUD Offline.\n**IP:** ${clientIP}`);
+         sendAlert(`<@${ADMIN_ID}>\n**Block:** HUD Offline.\n**IP:** ${clientIP}`);
          return new Response(JSON.stringify({ error: "SECURITY LOCKOUT: HUD OFFLINE" }), { status: 403 });
     }
 
-    // ==========================================================
-    // 🔑 PHASE 3: PASSWORD CHECK (Crucial: Must happen BEFORE Step-Up)
-    // ==========================================================
-    
-    // If password is WRONG -> Log it immediately. This ensures failCount increases.
+    // 4. PASSWORD CHECK
     if (password !== actualPassword) {
-       await supabase.from('audit_logs').insert({ 
-           actor_type: 'ATTACKER', ip: clientIP, action: 'LOGIN_FAIL', details: 'Wrong Password' 
-       });
-       sendAlert(`<@${ADMIN_ID}>\n**Alert:** Login failed (Bad Password).\n**Source:** ${clientIP} (${country})\n**Count:** ${failCount + 1}/5`);
-       
-       await new Promise(r => setTimeout(r, 2000)); // Delay
+       await supabase.from('audit_logs').insert({ actor_type: 'ATTACKER', ip: clientIP, action: 'LOGIN_FAIL', details: 'Wrong Password' });
+       sendAlert(`<@${ADMIN_ID}>\n**Alert:** Login failed.\n**Source:** ${clientIP}`);
+       await new Promise(r => setTimeout(r, 2000));
        return new Response(JSON.stringify({ error: "PASSWORD_INCORRECT" }), { status: 401 });
     }
 
-    // ==========================================================
-    // 🕵️ PHASE 4: ADAPTIVE STEP-UP (The "Suspicious" Check)
-    // ==========================================================
-    // We only get here if Password was CORRECT.
-
-    // A. Verify Code if provided
+    // 5. STEP-UP CHECK
     let isVerified = false;
     if (stepUpCode) {
         const { data: storedCode } = await supabase.from('system_config').select('value').eq('key', 'temp_auth_code').single();
         if (!storedCode || storedCode.value !== stepUpCode) {
-            // Wrong code counts as a failure too
             await supabase.from('audit_logs').insert({ actor_type: 'ATTACKER', ip: clientIP, action: 'LOGIN_FAIL', details: 'Wrong Step-Up Code' });
             return new Response(JSON.stringify({ error: "INVALID_VERIFICATION_CODE" }), { status: 401 });
         }
-        await supabase.from('system_config').delete().eq('key', 'temp_auth_code'); // Burn code
+        await supabase.from('system_config').delete().eq('key', 'temp_auth_code');
         isVerified = true;
     }
 
-    // B. Trigger Step-Up if Suspicious AND Not yet verified
-    // Suspicious = 2 or more failures in history
     if (failCount >= 2 && !isVerified) {
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         await supabase.from('system_config').upsert({ key: 'temp_auth_code', value: code });
-
-        sendAlert(`<@${ADMIN_ID}>\n**🛡️ SUSPICIOUS LOGIN**\n**Password:** Correct\n**History:** ${failCount} recent fails\n**VERIFICATION CODE:** \`${code}\``);
-
-        return new Response(JSON.stringify({ 
-            stepUp: true, 
-            message: "Suspicious activity detected. Verification code sent." 
-        }), { status: 200 });
+        sendAlert(`<@${ADMIN_ID}>\n**🛡️ SUSPICIOUS LOGIN**\n**Code:** \`${code}\``);
+        return new Response(JSON.stringify({ stepUp: true, message: "Verification required." }), { status: 200 });
     }
 
-    // ==========================================================
-    // ✅ PHASE 5: 2FA & SUCCESS
-    // ==========================================================
-
+    // 6. 2FA CHECK
     if (totpSecret) {
         const totp = new OTPAuth.TOTP({ algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(totpSecret) });
         const delta = totp.validate({ token: token, window: 2 });
@@ -144,7 +143,8 @@ export async function onRequestPost(context) {
         }
     }
 
-    sendAlert(`<@${ADMIN_ID}>\n**System Notice:** Admin session established.\n**IP:** ${clientIP} (${country})`);
+    // SUCCESS
+    sendAlert(`<@${ADMIN_ID}>\n**Success:** Admin session started.\n**IP:** ${clientIP}`);
     await supabase.from('audit_logs').insert({ actor_type: 'ADMIN', ip: clientIP, action: 'LOGIN_SUCCESS', details: 'Session Started' });
 
     return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
