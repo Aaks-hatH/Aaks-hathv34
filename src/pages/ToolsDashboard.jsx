@@ -161,6 +161,141 @@ function VirusTotalScanner() {
 }
 
 // ==========================================
+// 🕵️ STEGANOGRAPHY (Hide Text in Images)
+// ==========================================
+
+function SteganographyTool() {
+  const [mode, setMode] = useState('encode'); // encode | decode
+  const [text, setText] = useState('');
+  const [image, setImage] = useState(null);
+  const [output, setOutput] = useState(null);
+  const canvasRef = React.useRef(null);
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => setImage(img);
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+    setOutput(null);
+  };
+
+  const processSteganography = () => {
+    if (!image || (!text && mode === 'encode')) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    ctx.drawImage(image, 0, 0);
+    
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+
+    if (mode === 'encode') {
+      // ENCODE: Text -> Binary -> LSB of pixels
+      let binary = '';
+      for (let i = 0; i < text.length; i++) {
+        binary += text.charCodeAt(i).toString(2).padStart(8, '0');
+      }
+      binary += '00000000'; // Null terminator
+
+      if (binary.length > data.length / 4) {
+        alert("Text too long for this image!");
+        return;
+      }
+
+      let dataIdx = 0;
+      for (let i = 0; i < binary.length; i++) {
+        const bit = parseInt(binary[i]);
+        // Clear LSB then set it to our bit
+        data[dataIdx] = (data[dataIdx] & ~1) | bit;
+        dataIdx++;
+        // Skip Alpha channel (every 4th byte)
+        if ((dataIdx + 1) % 4 === 0) dataIdx++; 
+      }
+      
+      ctx.putImageData(imgData, 0, 0);
+      setOutput(canvas.toDataURL('image/png'));
+    } 
+    else {
+      // DECODE: LSB of pixels -> Binary -> Text
+      let binary = '';
+      let charBuffer = '';
+      let result = '';
+      
+      for (let i = 0; i < data.length; i++) {
+        // Skip Alpha
+        if ((i + 1) % 4 === 0) continue;
+        
+        binary += (data[i] & 1).toString();
+        
+        if (binary.length === 8) {
+          if (binary === '00000000') break; // Found terminator
+          result += String.fromCharCode(parseInt(binary, 2));
+          binary = '';
+        }
+      }
+      setOutput(result); // This is the decoded text
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Hidden Canvas for processing */}
+      <canvas ref={canvasRef} className="hidden" />
+      
+      {/* Mode Switcher */}
+      <div className="flex gap-2 p-1 bg-slate-900 rounded-lg w-fit">
+        <button onClick={() => {setMode('encode'); setOutput(null);}} className={`px-4 py-1 text-xs rounded transition-all ${mode==='encode' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}>Hide Data</button>
+        <button onClick={() => {setMode('decode'); setOutput(null);}} className={`px-4 py-1 text-xs rounded transition-all ${mode==='decode' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>Extract Data</button>
+      </div>
+
+      {/* Input Area */}
+      <div className="space-y-3">
+        <Input type="file" accept="image/*" onChange={handleImageUpload} className="bg-slate-950 border-slate-700 text-xs" />
+        
+        {mode === 'encode' && (
+          <Textarea 
+            placeholder="Enter secret message..." 
+            value={text} 
+            onChange={e => setText(e.target.value)} 
+            className="bg-slate-950 border-slate-700 font-mono text-xs text-green-400"
+          />
+        )}
+        
+        <Button onClick={processSteganography} disabled={!image} className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700">
+          {mode === 'encode' ? <><Lock className="w-4 h-4 mr-2"/> Encrypt into Image</> : <><Search className="w-4 h-4 mr-2"/> Scan Image for Data</>}
+        </Button>
+      </div>
+
+      {/* Results Area */}
+      {output && (
+        <div className="animate-in fade-in slide-in-from-bottom-2">
+          {mode === 'encode' ? (
+            <div className="text-center bg-slate-900 p-4 rounded border border-cyan-900/50">
+               <img src={output} alt="Secret" className="max-h-40 mx-auto mb-2 border border-slate-700" />
+               <a href={output} download="secret_image.png">
+                 <Button size="sm" className="bg-cyan-600 hover:bg-cyan-500 w-full">Download Payload</Button>
+               </a>
+            </div>
+          ) : (
+             <div className="bg-black p-4 rounded border border-purple-900/50">
+               <div className="text-xs text-slate-500 uppercase mb-1">Decoded Payload:</div>
+               <div className="font-mono text-purple-400 text-sm break-all">{output}</div>
+             </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
 // 🚀 COOL LIVE APIS (Client Side is fine for these)
 // ==========================================
 
