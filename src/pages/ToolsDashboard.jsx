@@ -411,24 +411,87 @@ function AesEncryptor() {
   const [mode, setMode] = useState('encrypt');
 
   const process = () => {
-    if (!text || !key) return;
-    let output = '';
-    for (let i = 0; i < text.length; i++) {
-      output += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    if (!text || !key) {
+      setResult("Error: Message and Key are required.");
+      return;
     }
+
+    let inputStr = text;
+
+    // 1. If Decrypting, we must decode Base64 first
+    if (mode === 'decrypt') {
+      try {
+        inputStr = atob(text);
+      } catch (e) {
+        setResult("Error: Invalid Ciphertext. Ensure it is a valid Base64 string.");
+        return;
+      }
+    }
+
+    // 2. XOR Logic (Symmetric)
+    let output = '';
+    for (let i = 0; i < inputStr.length; i++) {
+      output += String.fromCharCode(inputStr.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+
+    // 3. If Encrypting, encode result to Base64 so it's printable
     setResult(mode === 'encrypt' ? btoa(output) : output);
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        <Button size="sm" onClick={() => setMode('encrypt')} className={mode==='encrypt' ? 'bg-green-600' : 'bg-slate-800'}>Encrypt</Button>
-        <Button size="sm" onClick={() => setMode('decrypt')} className={mode==='decrypt' ? 'bg-red-600' : 'bg-slate-800'}>Decrypt</Button>
+      {/* Toggle Buttons */}
+      <div className="flex gap-2 bg-slate-900 p-1 rounded-lg w-fit">
+        <button 
+          onClick={() => {setMode('encrypt'); setResult('');}} 
+          className={`px-4 py-1 text-xs font-bold rounded transition-all ${mode==='encrypt' ? 'bg-green-600 text-black shadow-[0_0_10px_rgba(34,197,94,0.4)]' : 'text-slate-500 hover:text-white'}`}
+        >
+          ENCRYPT
+        </button>
+        <button 
+          onClick={() => {setMode('decrypt'); setResult('');}} 
+          className={`px-4 py-1 text-xs font-bold rounded transition-all ${mode==='decrypt' ? 'bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.4)]' : 'text-slate-500 hover:text-white'}`}
+        >
+          DECRYPT
+        </button>
       </div>
-      <Input type="password" placeholder="Key" value={key} onChange={(e)=>setKey(e.target.value)} className="bg-slate-950 border-slate-700"/>
-      <Textarea placeholder={mode === 'encrypt' ? "Message" : "Ciphertext"} value={text} onChange={(e)=>setText(e.target.value)} className="bg-slate-950 border-slate-700 h-20"/>
-      <Button onClick={process} className="w-full bg-slate-800">Process</Button>
-      {result && <div className="bg-black p-3 rounded border border-green-900 text-green-500 font-mono text-xs break-all">{result}</div>}
+
+      {/* Inputs */}
+      <Input 
+        type="password" 
+        placeholder="Secret Key (e.g. 'hunter2')" 
+        value={key} 
+        onChange={(e)=>setKey(e.target.value)} 
+        className="bg-slate-950 border-slate-700 font-mono text-xs text-yellow-500"
+      />
+      <Textarea 
+        placeholder={mode === 'encrypt' ? "Enter plain text..." : "Paste Base64 ciphertext here..."} 
+        value={text} 
+        onChange={(e)=>setText(e.target.value)} 
+        className="bg-slate-950 border-slate-700 h-24 font-mono text-xs text-slate-300"
+      />
+      
+      <Button onClick={process} className={`w-full border border-slate-700 ${mode==='encrypt' ? 'bg-green-900/20 text-green-400 hover:bg-green-900/40' : 'bg-red-900/20 text-red-400 hover:bg-red-900/40'}`}>
+        {mode === 'encrypt' ? 'Generate Cipher' : 'Unlock Message'}
+      </Button>
+
+      {/* Output Display */}
+      {result && (
+        <div className="bg-black p-4 rounded border border-slate-800 relative group">
+          <div className="text-[10px] text-slate-600 uppercase mb-2">Output Result:</div>
+          <div className="font-mono text-cyan-400 text-xs break-all leading-relaxed">
+            {result}
+          </div>
+          <Button 
+            size="sm" 
+            variant="ghost"
+            onClick={() => navigator.clipboard.writeText(result)}
+            className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 hover:bg-slate-700"
+          >
+            <Copy className="w-3 h-3 text-white" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
