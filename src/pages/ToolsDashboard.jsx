@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, Shield, Code, Cpu, Database, Search, Lock, 
   AlertTriangle, Radio, ArrowLeft, Copy, Check, Wifi, 
   Hash, Binary, Key, Zap, Rocket, Newspaper, Smile, Server,
-  Activity, Globe
+  Activity, Globe, Eye
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -169,7 +169,7 @@ function SteganographyTool() {
   const [text, setText] = useState('');
   const [image, setImage] = useState(null);
   const [output, setOutput] = useState(null);
-  const canvasRef = React.useRef(null);
+  const canvasRef = useRef(null);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -532,19 +532,19 @@ export default function ToolsDashboard() {
 
           {/* 🛠️ TOOLS TAB */}
           <TabsContent value="tools" className="space-y-6">
-             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"> {/* Changed grid-cols-2 to lg:grid-cols-3 */}
+             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                
-               {/* Existing Tools... */}
                <Card className="bg-slate-900/50 border-slate-800">
                  <CardHeader><CardTitle className="text-red-400 flex items-center gap-2"><Terminal className="w-5 h-5"/> Reverse Shell Gen</CardTitle></CardHeader>
                  <CardContent><ReverseShellGen /></CardContent>
                </Card>
+               
                <Card className="bg-slate-900/50 border-slate-800">
                  <CardHeader><CardTitle className="text-green-400 flex items-center gap-2"><Lock className="w-5 h-5"/> "Ghost Writer" AES</CardTitle></CardHeader>
                  <CardContent><AesEncryptor /></CardContent>
                </Card>
 
-               {/* NEW STEGANOGRAPHY CARD */}
+               {/* STEGANOGRAPHY STUDIO */}
                <Card className="bg-slate-900/50 border-slate-800">
                  <CardHeader>
                    <CardTitle className="text-purple-400 flex items-center gap-2">
