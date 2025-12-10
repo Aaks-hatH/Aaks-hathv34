@@ -532,7 +532,9 @@ export default function ToolsDashboard() {
 
           {/* 🛠️ TOOLS TAB */}
           <TabsContent value="tools" className="space-y-6">
-             <div className="grid md:grid-cols-2 gap-6">
+             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"> {/* Changed grid-cols-2 to lg:grid-cols-3 */}
+               
+               {/* Existing Tools... */}
                <Card className="bg-slate-900/50 border-slate-800">
                  <CardHeader><CardTitle className="text-red-400 flex items-center gap-2"><Terminal className="w-5 h-5"/> Reverse Shell Gen</CardTitle></CardHeader>
                  <CardContent><ReverseShellGen /></CardContent>
@@ -541,9 +543,23 @@ export default function ToolsDashboard() {
                  <CardHeader><CardTitle className="text-green-400 flex items-center gap-2"><Lock className="w-5 h-5"/> "Ghost Writer" AES</CardTitle></CardHeader>
                  <CardContent><AesEncryptor /></CardContent>
                </Card>
+
+               {/* NEW STEGANOGRAPHY CARD */}
+               <Card className="bg-slate-900/50 border-slate-800">
+                 <CardHeader>
+                   <CardTitle className="text-purple-400 flex items-center gap-2">
+                     <Eye className="w-5 h-5"/> Steganography Studio
+                   </CardTitle>
+                   <p className="text-xs text-slate-500">Hide secrets inside image pixels</p>
+                 </CardHeader>
+                 <CardContent>
+                   <SteganographyTool />
+                 </CardContent>
+               </Card>
+
              </div>
           </TabsContent>
-
+          
         </Tabs>
       </div>
     </div>
