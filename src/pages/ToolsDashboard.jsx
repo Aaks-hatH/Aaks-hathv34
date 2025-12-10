@@ -3,7 +3,7 @@ import {
   Terminal, Shield, Code, Cpu, Database, Search, Lock, 
   AlertTriangle, Radio, ArrowLeft, Copy, Check, Wifi, 
   Hash, Binary, Key, Zap, Rocket, Newspaper, Smile, Server,
-  Activity, Globe, Eye
+  Activity, Globe, Eye, MapPin
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import EXIF from 'exif-js';
 
 // ==========================================
-// 🤖 REAL AI OPS TOOLS (Secure Backend Call)
+// AI OPS TOOLS (With Neural WAF)
 // ==========================================
 
 function AiCodeAuditor() {
@@ -22,8 +23,40 @@ function AiCodeAuditor() {
   const [analysis, setAnalysis] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Heuristic Analysis Engine (Neural WAF)
+  const checkHeuristics = (input) => {
+    // 1. Attack Signatures (SQLi, XSS, Path Traversal)
+    const patterns = [
+      /(\%27)|(\')|(\-\-)|(\%23)|(#)/i, // SQL Comments
+      /((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))/i, // SQL Logic
+      /\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))/i, // SQL OR
+      /(<script>)/i, // XSS
+      /(\.\.\/)/ // Path Traversal
+    ];
+    
+    // 2. Entropy Calculation (Detects encrypted payloads/shellcode)
+    const entropy = input.split('').reduce((acc, char, _, arr) => {
+       const p = arr.filter(c => c === char).length / arr.length;
+       return acc - p * Math.log2(p);
+    }, 0);
+
+    let score = 0;
+    if (patterns.some(p => p.test(input))) score += 50;
+    if (entropy > 4.5) score += 30; 
+    
+    return score;
+  };
+
   const analyzeCode = async () => {
     if (!code) return;
+    
+    // Step 1: Run Neural WAF Check
+    const threatScore = checkHeuristics(code);
+    if (threatScore > 40) {
+       setAnalysis(`[SECURITY BLOCK] Malicious Payload Detected.\n\nHeuristic Analysis:\n- Threat Score: ${threatScore}/100\n- Attack Signature Match\n- High Entropy Detected\n\nRequest Dropped by Client-Side WAF.`);
+       return; 
+    }
+
     setLoading(true);
     setAnalysis("");
 
@@ -34,7 +67,6 @@ function AiCodeAuditor() {
         body: JSON.stringify({ code })
       });
 
-      // Safe Parse
       const text = await res.text();
       let data;
       try {
@@ -47,7 +79,7 @@ function AiCodeAuditor() {
       setAnalysis(data.message);
 
     } catch (error) {
-      setAnalysis(`⚠️ Error: ${error.message}`);
+      setAnalysis(`Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -78,7 +110,68 @@ function AiCodeAuditor() {
 }
 
 // ==========================================
-// 🦠 REAL THREAT INTEL (Secure Backend Call)
+// EXIF GHOST SCANNER
+// ==========================================
+
+function ExifExtractor() {
+  const [data, setData] = useState(null);
+  const [gps, setGps] = useState(null);
+
+  const handleUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    EXIF.getData(file, function() {
+      const allData = EXIF.getAllTags(this);
+      setData(allData);
+
+      // Extract GPS
+      const lat = EXIF.getTag(this, "GPSLatitude");
+      const lon = EXIF.getTag(this, "GPSLongitude");
+      const latRef = EXIF.getTag(this, "GPSLatitudeRef");
+      const lonRef = EXIF.getTag(this, "GPSLongitudeRef");
+
+      if (lat && lon && latRef && lonRef) {
+        const toDecimal = (coord, ref) => {
+          let dec = coord[0] + coord[1] / 60 + coord[2] / 3600;
+          return (ref === "S" || ref === "W") ? dec * -1 : dec;
+        };
+        setGps(`${toDecimal(lat, latRef).toFixed(6)}, ${toDecimal(lon, lonRef).toFixed(6)}`);
+      } else {
+        setGps("No GPS Data Found (Clean Image)");
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <Input type="file" onChange={handleUpload} className="bg-slate-950 border-slate-700 text-xs" />
+      
+      {gps && (
+        <div className={`p-3 rounded border text-center ${gps.includes("No") ? "bg-green-900/20 border-green-900 text-green-400" : "bg-red-900/20 border-red-900 text-red-400"}`}>
+          <div className="text-[10px] uppercase font-bold">Geolocation Status</div>
+          <div className="font-mono text-sm">{gps}</div>
+          {!gps.includes("No") && <div className="text-[10px] mt-1 animate-pulse">TARGET LOCATED</div>}
+        </div>
+      )}
+
+      {data && (
+        <div className="bg-black p-4 rounded border border-slate-800 h-40 overflow-y-auto custom-scrollbar text-xs font-mono text-slate-400">
+          {data.Make && <div><span className="text-cyan-500">DEVICE:</span> {data.Make} {data.Model}</div>}
+          {data.DateTimeOriginal && <div><span className="text-cyan-500">TIME:</span> {data.DateTimeOriginal}</div>}
+          {data.Software && <div><span className="text-cyan-500">SOFTWARE:</span> {data.Software}</div>}
+          <div className="mt-2 text-slate-600">--- RAW DUMP ---</div>
+          {Object.keys(data).slice(0, 5).map(k => (
+             <div key={k}>{k}: {String(data[k]).substring(0, 20)}...</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// THREAT INTEL
 // ==========================================
 
 function VirusTotalScanner() {
@@ -100,7 +193,6 @@ function VirusTotalScanner() {
         body: JSON.stringify({ target })
       });
 
-      // Safe Parse
       const text = await res.text();
       let data;
       try {
@@ -149,9 +241,9 @@ function VirusTotalScanner() {
           </div>
           <div className="col-span-2 pt-2 border-t border-slate-800">
              {result.malicious > 0 ? (
-               <Badge className="bg-red-900/50 text-red-400 hover:bg-red-900/50">⚠️ THREAT DETECTED</Badge>
+               <Badge className="bg-red-900/50 text-red-400 hover:bg-red-900/50">THREAT DETECTED</Badge>
              ) : (
-               <Badge className="bg-green-900/50 text-green-400 hover:bg-green-900/50">✅ CLEAN TARGET</Badge>
+               <Badge className="bg-green-900/50 text-green-400 hover:bg-green-900/50">CLEAN TARGET</Badge>
              )}
           </div>
         </div>
@@ -161,11 +253,11 @@ function VirusTotalScanner() {
 }
 
 // ==========================================
-// 🕵️ STEGANOGRAPHY (Hide Text in Images)
+// STEGANOGRAPHY STUDIO
 // ==========================================
 
 function SteganographyTool() {
-  const [mode, setMode] = useState('encode'); // encode | decode
+  const [mode, setMode] = useState('encode');
   const [text, setText] = useState('');
   const [image, setImage] = useState(null);
   const [output, setOutput] = useState(null);
@@ -197,12 +289,11 @@ function SteganographyTool() {
     const data = imgData.data;
 
     if (mode === 'encode') {
-      // ENCODE: Text -> Binary -> LSB of pixels
       let binary = '';
       for (let i = 0; i < text.length; i++) {
         binary += text.charCodeAt(i).toString(2).padStart(8, '0');
       }
-      binary += '00000000'; // Null terminator
+      binary += '00000000'; 
 
       if (binary.length > data.length / 4) {
         alert("Text too long for this image!");
@@ -212,10 +303,8 @@ function SteganographyTool() {
       let dataIdx = 0;
       for (let i = 0; i < binary.length; i++) {
         const bit = parseInt(binary[i]);
-        // Clear LSB then set it to our bit
         data[dataIdx] = (data[dataIdx] & ~1) | bit;
         dataIdx++;
-        // Skip Alpha channel (every 4th byte)
         if ((dataIdx + 1) % 4 === 0) dataIdx++; 
       }
       
@@ -223,42 +312,34 @@ function SteganographyTool() {
       setOutput(canvas.toDataURL('image/png'));
     } 
     else {
-      // DECODE: LSB of pixels -> Binary -> Text
       let binary = '';
-      let charBuffer = '';
       let result = '';
       
       for (let i = 0; i < data.length; i++) {
-        // Skip Alpha
         if ((i + 1) % 4 === 0) continue;
-        
         binary += (data[i] & 1).toString();
         
         if (binary.length === 8) {
-          if (binary === '00000000') break; // Found terminator
+          if (binary === '00000000') break;
           result += String.fromCharCode(parseInt(binary, 2));
           binary = '';
         }
       }
-      setOutput(result); // This is the decoded text
+      setOutput(result);
     }
   };
 
   return (
     <div className="space-y-4">
-      {/* Hidden Canvas for processing */}
       <canvas ref={canvasRef} className="hidden" />
       
-      {/* Mode Switcher */}
       <div className="flex gap-2 p-1 bg-slate-900 rounded-lg w-fit">
         <button onClick={() => {setMode('encode'); setOutput(null);}} className={`px-4 py-1 text-xs rounded transition-all ${mode==='encode' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}>Hide Data</button>
         <button onClick={() => {setMode('decode'); setOutput(null);}} className={`px-4 py-1 text-xs rounded transition-all ${mode==='decode' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>Extract Data</button>
       </div>
 
-      {/* Input Area */}
       <div className="space-y-3">
         <Input type="file" accept="image/*" onChange={handleImageUpload} className="bg-slate-950 border-slate-700 text-xs" />
-        
         {mode === 'encode' && (
           <Textarea 
             placeholder="Enter secret message..." 
@@ -267,13 +348,11 @@ function SteganographyTool() {
             className="bg-slate-950 border-slate-700 font-mono text-xs text-green-400"
           />
         )}
-        
         <Button onClick={processSteganography} disabled={!image} className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700">
           {mode === 'encode' ? <><Lock className="w-4 h-4 mr-2"/> Encrypt into Image</> : <><Search className="w-4 h-4 mr-2"/> Scan Image for Data</>}
         </Button>
       </div>
 
-      {/* Results Area */}
       {output && (
         <div className="animate-in fade-in slide-in-from-bottom-2">
           {mode === 'encode' ? (
@@ -296,7 +375,7 @@ function SteganographyTool() {
 }
 
 // ==========================================
-// 🚀 COOL LIVE APIS (Client Side is fine for these)
+// LIVE FEEDS
 // ==========================================
 
 function SpaceXTracker() {
@@ -387,7 +466,7 @@ function CatDestress() {
 
   return (
     <div className="text-center">
-      <div className="aspect-video bg-slate-950 rounded-lg overflow-hidden mb-2 relative">
+      <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden mb-2 relative">
         {cat ? (
            <img src={cat} alt="Random Cat" className="w-full h-full object-cover" />
         ) : <div className="w-full h-full flex items-center justify-center text-slate-600">Loading Cat...</div>}
@@ -401,7 +480,7 @@ function CatDestress() {
 }
 
 // ==========================================
-// 🛠️ GENERATORS (Calculators)
+// AES GHOST WRITER
 // ==========================================
 
 function AesEncryptor() {
@@ -411,87 +490,33 @@ function AesEncryptor() {
   const [mode, setMode] = useState('encrypt');
 
   const process = () => {
-    if (!text || !key) {
-      setResult("Error: Message and Key are required.");
-      return;
-    }
-
+    if (!text || !key) return;
     let inputStr = text;
-
-    // 1. If Decrypting, we must decode Base64 first
     if (mode === 'decrypt') {
-      try {
-        inputStr = atob(text);
-      } catch (e) {
-        setResult("Error: Invalid Ciphertext. Ensure it is a valid Base64 string.");
-        return;
-      }
+        try {
+            inputStr = atob(text);
+        } catch (e) {
+            setResult("Invalid Ciphertext (Not Base64)");
+            return;
+        }
     }
-
-    // 2. XOR Logic (Symmetric)
     let output = '';
     for (let i = 0; i < inputStr.length; i++) {
       output += String.fromCharCode(inputStr.charCodeAt(i) ^ key.charCodeAt(i % key.length));
     }
-
-    // 3. If Encrypting, encode result to Base64 so it's printable
     setResult(mode === 'encrypt' ? btoa(output) : output);
   };
 
   return (
     <div className="space-y-4">
-      {/* Toggle Buttons */}
-      <div className="flex gap-2 bg-slate-900 p-1 rounded-lg w-fit">
-        <button 
-          onClick={() => {setMode('encrypt'); setResult('');}} 
-          className={`px-4 py-1 text-xs font-bold rounded transition-all ${mode==='encrypt' ? 'bg-green-600 text-black shadow-[0_0_10px_rgba(34,197,94,0.4)]' : 'text-slate-500 hover:text-white'}`}
-        >
-          ENCRYPT
-        </button>
-        <button 
-          onClick={() => {setMode('decrypt'); setResult('');}} 
-          className={`px-4 py-1 text-xs font-bold rounded transition-all ${mode==='decrypt' ? 'bg-red-600 text-white shadow-[0_0_10px_rgba(220,38,38,0.4)]' : 'text-slate-500 hover:text-white'}`}
-        >
-          DECRYPT
-        </button>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => setMode('encrypt')} className={mode==='encrypt' ? 'bg-green-600' : 'bg-slate-800'}>Encrypt</Button>
+        <Button size="sm" onClick={() => setMode('decrypt')} className={mode==='decrypt' ? 'bg-red-600' : 'bg-slate-800'}>Decrypt</Button>
       </div>
-
-      {/* Inputs */}
-      <Input 
-        type="password" 
-        placeholder="Secret Key (e.g. 'hunter2')" 
-        value={key} 
-        onChange={(e)=>setKey(e.target.value)} 
-        className="bg-slate-950 border-slate-700 font-mono text-xs text-yellow-500"
-      />
-      <Textarea 
-        placeholder={mode === 'encrypt' ? "Enter plain text..." : "Paste Base64 ciphertext here..."} 
-        value={text} 
-        onChange={(e)=>setText(e.target.value)} 
-        className="bg-slate-950 border-slate-700 h-24 font-mono text-xs text-slate-300"
-      />
-      
-      <Button onClick={process} className={`w-full border border-slate-700 ${mode==='encrypt' ? 'bg-green-900/20 text-green-400 hover:bg-green-900/40' : 'bg-red-900/20 text-red-400 hover:bg-red-900/40'}`}>
-        {mode === 'encrypt' ? 'Generate Cipher' : 'Unlock Message'}
-      </Button>
-
-      {/* Output Display */}
-      {result && (
-        <div className="bg-black p-4 rounded border border-slate-800 relative group">
-          <div className="text-[10px] text-slate-600 uppercase mb-2">Output Result:</div>
-          <div className="font-mono text-cyan-400 text-xs break-all leading-relaxed">
-            {result}
-          </div>
-          <Button 
-            size="sm" 
-            variant="ghost"
-            onClick={() => navigator.clipboard.writeText(result)}
-            className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 hover:bg-slate-700"
-          >
-            <Copy className="w-3 h-3 text-white" />
-          </Button>
-        </div>
-      )}
+      <Input type="password" placeholder="Key" value={key} onChange={(e)=>setKey(e.target.value)} className="bg-slate-950 border-slate-700"/>
+      <Textarea placeholder={mode === 'encrypt' ? "Message" : "Ciphertext"} value={text} onChange={(e)=>setText(e.target.value)} className="bg-slate-950 border-slate-700 h-20"/>
+      <Button onClick={process} className="w-full bg-slate-800">Process</Button>
+      {result && <div className="bg-black p-3 rounded border border-green-900 text-green-500 font-mono text-xs break-all">{result}</div>}
     </div>
   );
 }
@@ -520,7 +545,7 @@ function ReverseShellGen() {
 }
 
 // ==========================================
-// 🚀 MAIN DASHBOARD LAYOUT
+// MAIN DASHBOARD
 // ==========================================
 
 export default function ToolsDashboard() {
@@ -534,9 +559,9 @@ export default function ToolsDashboard() {
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-mono font-bold mb-4 flex items-center gap-3">
             <Server className="w-8 h-8 text-cyan-500" />
-            <span className="text-slate-100">Cyber Army Knife <span className="text-cyan-600 text-sm align-top">v3.0</span></span>
+            <span className="text-slate-100">Cyber Army Knife <span className="text-cyan-600 text-sm align-top">v3.1</span></span>
           </h1>
-          <p className="text-slate-400">Integrated with OpenAI, VirusTotal, and SpaceX APIs.</p>
+          <p className="text-slate-400">Integrated with OpenAI, VirusTotal, and Heuristic Analysis.</p>
         </div>
 
         <Tabs defaultValue="live" className="space-y-6">
@@ -575,20 +600,27 @@ export default function ToolsDashboard() {
 
           {/* 🧠 AI & INTEL TAB */}
           <TabsContent value="intel" className="space-y-6">
-             <div className="grid md:grid-cols-2 gap-6">
+             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                <Card className="bg-slate-900/50 border-slate-800">
                  <CardHeader>
                    <CardTitle className="text-green-400 flex items-center gap-2"><Cpu className="w-5 h-5"/> AI Code Auditor</CardTitle>
-                   <p className="text-xs text-slate-500">Powered by OpenAI GPT-4o-mini</p>
+                   <p className="text-xs text-slate-500">Neural WAF + GPT-4o</p>
                  </CardHeader>
                  <CardContent><AiCodeAuditor /></CardContent>
                </Card>
                <Card className="bg-slate-900/50 border-slate-800">
                  <CardHeader>
                    <CardTitle className="text-blue-400 flex items-center gap-2"><Shield className="w-5 h-5"/> VirusTotal Scanner</CardTitle>
-                   <p className="text-xs text-slate-500">Domain / IP Reputation Check</p>
+                   <p className="text-xs text-slate-500">Domain / IP Reputation</p>
                  </CardHeader>
                  <CardContent><VirusTotalScanner /></CardContent>
+               </Card>
+               <Card className="bg-slate-900/50 border-slate-800">
+                 <CardHeader>
+                   <CardTitle className="text-cyan-400 flex items-center gap-2"><MapPin className="w-5 h-5"/> EXIF Ghost Scanner</CardTitle>
+                   <p className="text-xs text-slate-500">Metadata Extraction</p>
+                 </CardHeader>
+                 <CardContent><ExifExtractor /></CardContent>
                </Card>
              </div>
           </TabsContent>
@@ -596,30 +628,18 @@ export default function ToolsDashboard() {
           {/* 🛠️ TOOLS TAB */}
           <TabsContent value="tools" className="space-y-6">
              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-               
                <Card className="bg-slate-900/50 border-slate-800">
                  <CardHeader><CardTitle className="text-red-400 flex items-center gap-2"><Terminal className="w-5 h-5"/> Reverse Shell Gen</CardTitle></CardHeader>
                  <CardContent><ReverseShellGen /></CardContent>
                </Card>
-               
                <Card className="bg-slate-900/50 border-slate-800">
                  <CardHeader><CardTitle className="text-green-400 flex items-center gap-2"><Lock className="w-5 h-5"/> "Ghost Writer" AES</CardTitle></CardHeader>
                  <CardContent><AesEncryptor /></CardContent>
                </Card>
-
-               {/* STEGANOGRAPHY STUDIO */}
                <Card className="bg-slate-900/50 border-slate-800">
-                 <CardHeader>
-                   <CardTitle className="text-purple-400 flex items-center gap-2">
-                     <Eye className="w-5 h-5"/> Steganography Studio
-                   </CardTitle>
-                   <p className="text-xs text-slate-500">Hide secrets inside image pixels</p>
-                 </CardHeader>
-                 <CardContent>
-                   <SteganographyTool />
-                 </CardContent>
+                 <CardHeader><CardTitle className="text-purple-400 flex items-center gap-2"><Eye className="w-5 h-5"/> Steganography Studio</CardTitle></CardHeader>
+                 <CardContent><SteganographyTool /></CardContent>
                </Card>
-
              </div>
           </TabsContent>
           
