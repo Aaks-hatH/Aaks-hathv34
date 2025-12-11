@@ -20,10 +20,37 @@ import { Card, CardContent } from "@/components/ui/card";
 
 // Project data with GitHub repo names
 const projectsData = {
+  'army-knife': {
+    title: 'Cyber Army Knife',
+    emoji: '⚔️',
+    description: 'The ultimate browser-based Red Team dashboard. Features real-time GPS tracking, Steganography tools, Neural WAF, and Dead Man\'s Switch authentication.',
+    longDescription: `A comprehensive Security Operations Center (SOC) running entirely in the browser and Cloudflare Edge.
+
+**Core Capabilities:**
+• **War Room Map**: Real-time GPS tracking of visitors using Leaflet & Supabase.
+• **Neural WAF**: Client-side Heuristic analysis to block SQLi/XSS payloads.
+• **Sentinel System**: Auto-bans brute force attackers and sends forensic email alerts.
+• **Steganography Studio**: Hide encrypted text inside PNG image pixels.
+• **Dead Man's Switch**: Physical security layer preventing admin login if HUD is offline.
+
+This project demonstrates advanced React patterns, Edge computing security, and real-time database management.`,
+    features: [
+      'Real-time GPS Visitor Tracking',
+      'AES & Steganography Encryption',
+      'Auto-Ban & Email Alerting',
+      'AI Code Auditing (GPT-4o)',
+      'Forensic EXIF Extraction'
+    ],
+    technologies: ['React', 'Supabase Realtime', 'Cloudflare Workers', 'EmailJS', 'Leaflet', 'OpenAI'],
+    github: 'cyber-army-knife',
+    demo: '/tools',
+    category: 'Security',
+    inProgress: false
+  },
   'face-rec': {
     title: 'Face Recognizer',
     emoji: '👤',
-    description: 'A browser-based face recognition tool using machine learning and detection libraries. This project leverages TensorFlow.js and face-api.js to detect and recognize faces directly in the browser without any server-side processing.',
+    description: 'A browser-based face recognition tool using machine learning and detection libraries. This project leverages TensorFlow.js and face-api.js.',
     longDescription: `This face recognition tool demonstrates the power of client-side machine learning. It uses:
 
 • **Face Detection**: Identifies faces in images or video streams
@@ -47,15 +74,14 @@ The entire process runs in the browser, ensuring privacy as no images are sent t
   'password-generator': {
     title: 'Password Generator',
     emoji: '🔐',
-    description: 'Creates secure, randomized passwords with adjustable strength options. Uses cryptographically secure random number generation for maximum security.',
+    description: 'Creates secure, randomized passwords with adjustable strength options. Uses cryptographically secure random number generation.',
     longDescription: `A security-focused password generator that creates strong, unique passwords using cryptographic randomness.
 
 Key Features:
 • **Customizable Length**: Generate passwords from 8 to 128 characters
 • **Character Options**: Include/exclude uppercase, lowercase, numbers, symbols
 • **Entropy Calculation**: Shows password strength in bits
-• **Copy to Clipboard**: One-click copying with visual feedback
-• **No Storage**: Passwords are never stored or transmitted`,
+• **Copy to Clipboard**: One-click copying with visual feedback`,
     features: [
       'Cryptographically secure randomization',
       'Adjustable password length',
@@ -71,19 +97,17 @@ Key Features:
   'password-checker': {
     title: 'Password Strength Checker',
     emoji: '🛡️',
-    description: 'Evaluates password strength based on entropy, complexity, and known weak patterns. Helps users understand how secure their passwords really are.',
+    description: 'Evaluates password strength based on entropy, complexity, and known weak patterns.',
     longDescription: `An advanced password analysis tool that evaluates security based on multiple factors:
 
 • **Entropy Calculation**: Mathematical measure of randomness
 • **Pattern Detection**: Identifies common weak patterns (123, abc, qwerty)
 • **Dictionary Check**: Compares against known weak passwords
-• **Character Analysis**: Evaluates diversity and distribution
 • **Time-to-Crack Estimation**: Shows how long it would take to brute force`,
     features: [
       'Real-time strength analysis',
       'Entropy calculation in bits',
       'Common pattern detection',
-      'Detailed feedback and suggestions',
       'Visual strength meter'
     ],
     technologies: ['JavaScript', 'Regex', 'HTML5', 'CSS3'],
@@ -94,27 +118,49 @@ Key Features:
   'halloween-game': {
     title: 'Halloween Game',
     emoji: '🎃',
-    description: 'A themed web game with backend-style components and progression logic. Full-stack project with user authentication and score tracking.',
+    description: 'A themed web game with backend-style components and progression logic. Full-stack project with user authentication.',
     longDescription: `A spooky Halloween-themed web game featuring:
 
 • **User System**: Registration and login functionality
 • **Game Mechanics**: Interactive gameplay with scoring
 • **Progression System**: Levels and achievements
-• **Leaderboard**: Compete with other players
-• **Admin Panel**: Manage users and game settings
-
-This project demonstrates full-stack development skills with both frontend interactivity and backend data persistence.`,
+• **Leaderboard**: Compete with other players`,
     features: [
       'User authentication system',
       'Interactive game mechanics',
       'Score tracking and leaderboards',
-      'Progressive difficulty levels',
-      'Admin dashboard'
+      'Progressive difficulty levels'
     ],
     technologies: ['JavaScript', 'PHP', 'MySQL', 'HTML5', 'CSS3'],
     github: 'Halloween-Game',
     demo: 'https://aaks-hath.github.io/Halloween-Game/',
     category: 'Game'
+  },
+  'keylogger-py': {
+    title: 'Advanced Keylogger',
+    emoji: '⌨️',
+    description: 'Educational Python script demonstrating input capturing, log encryption, and remote exfiltration techniques.',
+    longDescription: `An advanced educational malware simulation written in Python.
+
+**Warning: For Educational Use Only.**
+
+Features:
+• **Keystroke Capture**: Hooks into system events to record input.
+• **Screenshot Capability**: Captures screen on specific triggers.
+• **Log Encryption**: Encrypts logs locally before storage.
+• **Exfiltration**: Sends reports via SMTP or FTP.`,
+    features: [
+      'System Hooking',
+      'Automated Screenshots',
+      'AES Encryption of Logs',
+      'Email Exfiltration',
+      'Persistence Mechanisms'
+    ],
+    technologies: ['Python', 'pynput', 'smtplib', 'cryptography'],
+    github: 'keylogger-py',
+    demo: null,
+    category: 'Security',
+    inProgress: true
   },
   'network-scanner': {
     title: 'Network Scanner',
@@ -124,16 +170,11 @@ This project demonstrates full-stack development skills with both frontend inter
 
 • **Host Discovery**: Find active hosts on a network
 • **Port Scanning**: Identify open ports and services
-• **Service Detection**: Determine running services and versions
-• **OS Fingerprinting**: Identify operating systems
-• **Vulnerability Detection**: Basic vulnerability checks
-
-This tool is designed for ethical security testing and network administration.`,
+• **Service Detection**: Determine running services and versions`,
     features: [
       'Multiple scan types (SYN, TCP, UDP)',
       'Service version detection',
       'OS fingerprinting',
-      'Output to multiple formats',
       'Scriptable and automatable'
     ],
     technologies: ['Python', 'Nmap', 'python-nmap', 'Bash'],
@@ -146,13 +187,7 @@ This tool is designed for ethical security testing and network administration.`,
     title: 'Personal Portfolio',
     emoji: '🌐',
     description: 'My personal portfolio and project showcase hosted on GitHub Pages.',
-    longDescription: `A personal portfolio website showcasing my projects, skills, and experience in cybersecurity and web development.
-
-Features a clean, modern design with:
-• Responsive layout for all devices
-• Project showcase with live demos
-• Contact information and social links
-• Dark theme optimized for developers`,
+    longDescription: `A personal portfolio website showcasing my projects, skills, and experience in cybersecurity and web development.`,
     features: [
       'Responsive design',
       'Project showcase',
@@ -195,7 +230,6 @@ export default function ProjectDetail() {
         
         if (readmeRes.ok) {
           const readmeData = await readmeRes.json();
-          // Decode base64 content
           const content = atob(readmeData.content);
           setReadmeContent(content);
         }
@@ -233,7 +267,6 @@ export default function ProjectDetail() {
       transition={{ duration: 0.4 }}
       className="min-h-screen bg-slate-900 text-white"
     >
-      {/* Header */}
       <div className="bg-slate-800/50 border-b border-slate-700">
         <div className="max-w-5xl mx-auto px-4 py-4">
           <motion.div
@@ -254,14 +287,12 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-5xl mx-auto px-4 py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="space-y-8"
         >
-          {/* Project Header */}
           <div className="flex flex-col md:flex-row md:items-start gap-6">
             <div className="flex-shrink-0">
               <div className="w-24 h-24 bg-slate-800 rounded-2xl flex items-center justify-center border border-slate-700">
@@ -281,92 +312,39 @@ export default function ProjectDetail() {
               </div>
               <p className="text-slate-400 text-lg mb-4">{project.description}</p>
               
-              {/* Action Buttons */}
               <div className="flex flex-wrap gap-3">
                 {project.demo && (
-                  <a href={project.demo} target="_blank" rel="noopener noreferrer">
+                  <a href={project.demo} target={project.demo.startsWith('http') ? "_blank" : "_self"} rel="noopener noreferrer">
                     <Button className="bg-cyan-600 hover:bg-cyan-700">
                       <ExternalLink className="w-4 h-4 mr-2" />
                       Live Demo
                     </Button>
                   </a>
                 )}
-                <a 
-                  href={`https://github.com/aaks-hath/${project.github}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-800">
-                    <Github className="w-4 h-4 mr-2" />
-                    View Source
-                  </Button>
-                </a>
+                {project.github && (
+                  <a 
+                    href={`https://github.com/aaks-hath/${project.github}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                  >
+                    <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-800">
+                      <Github className="w-4 h-4 mr-2" />
+                      View Source
+                    </Button>
+                  </a>
+                )}
               </div>
             </div>
           </div>
 
-          {/* GitHub Stats */}
-          {loading ? (
-            <Card className="bg-slate-800/30 border-slate-700">
-              <CardContent className="p-6 flex items-center justify-center">
-                <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
-              </CardContent>
-            </Card>
-          ) : repoData && (
-            <Card className="bg-slate-800/30 border-slate-700">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-                  <Github className="w-5 h-5 text-cyan-400" />
-                  Repository Stats
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-slate-900/50 rounded-lg p-4 text-center">
-                    <Star className="w-5 h-5 text-yellow-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-slate-200">{repoData.stargazers_count}</p>
-                    <p className="text-slate-500 text-sm">Stars</p>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-lg p-4 text-center">
-                    <GitFork className="w-5 h-5 text-cyan-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-slate-200">{repoData.forks_count}</p>
-                    <p className="text-slate-500 text-sm">Forks</p>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-lg p-4 text-center">
-                    <Eye className="w-5 h-5 text-green-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-slate-200">{repoData.watchers_count}</p>
-                    <p className="text-slate-500 text-sm">Watchers</p>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-lg p-4 text-center">
-                    <Calendar className="w-5 h-5 text-purple-400 mx-auto mb-2" />
-                    <p className="text-lg font-bold text-slate-200">
-                      {new Date(repoData.updated_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                    </p>
-                    <p className="text-slate-500 text-sm">Last Update</p>
-                  </div>
-                </div>
-                {repoData.language && (
-                  <div className="mt-4 flex items-center gap-2">
-                    <Code2 className="w-4 h-4 text-slate-500" />
-                    <span className="text-slate-400">Primary Language:</span>
-                    <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
-                      {repoData.language}
-                    </Badge>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Details Grid */}
           <div className="grid md:grid-cols-2 gap-6">
-            {/* About */}
             <Card className="bg-slate-800/30 border-slate-700">
               <CardContent className="p-6">
                 <h3 className="text-lg font-semibold text-slate-200 mb-4">About</h3>
-                <p className="text-slate-400 whitespace-pre-line">{project.longDescription}</p>
+                <p className="text-slate-400 whitespace-pre-line leading-relaxed">{project.longDescription}</p>
               </CardContent>
             </Card>
 
-            {/* Features */}
             <Card className="bg-slate-800/30 border-slate-700">
               <CardContent className="p-6">
                 <h3 className="text-lg font-semibold text-slate-200 mb-4">Features</h3>
@@ -382,7 +360,6 @@ export default function ProjectDetail() {
             </Card>
           </div>
 
-          {/* Technologies */}
           <Card className="bg-slate-800/30 border-slate-700">
             <CardContent className="p-6">
               <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
@@ -401,24 +378,6 @@ export default function ProjectDetail() {
               </div>
             </CardContent>
           </Card>
-
-          {/* README Content */}
-          {readmeContent && (
-            <Card className="bg-slate-800/30 border-slate-700">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-                  <FileCode className="w-5 h-5 text-cyan-400" />
-                  README.md
-                </h3>
-                <div className="bg-slate-900/50 rounded-lg p-4 overflow-x-auto">
-                  <pre className="text-slate-400 text-sm whitespace-pre-wrap font-mono">
-                    {readmeContent.substring(0, 2000)}
-                    {readmeContent.length > 2000 && '...'}
-                  </pre>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </motion.div>
       </div>
     </motion.div>
