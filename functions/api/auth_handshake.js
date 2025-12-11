@@ -130,9 +130,20 @@ export async function onRequestPost(context) {
     }
 
     // 4. PASSWORD CHECK
+    // 4. PASSWORD CHECK
     if (password !== actualPassword) {
-       await supabase.from('audit_logs').insert({ actor_type: 'ATTACKER', ip: clientIP, action: 'LOGIN_FAIL', details: 'Wrong Password' });
-       // await new Promise(r => setTimeout(r, 2000)); // Comment out delay for faster testing
+       await supabase.from('audit_logs').insert({ 
+           actor_type: 'ATTACKER', 
+           ip: clientIP, 
+           action: 'LOGIN_FAIL', 
+           details: 'Wrong Password' 
+       });
+       
+       sendAlert(`<@${ADMIN_ID}>\n**Alert:** Login failed.\n**Source:** ${clientIP}`);
+       
+       // 👇 THIS LINE MUST BE ACTIVE FOR BAN LOGIC TO WORK 👇
+       await new Promise(r => setTimeout(r, 2000)); 
+       
        return new Response(JSON.stringify({ error: "PASSWORD_INCORRECT" }), { status: 401 });
     }
 
