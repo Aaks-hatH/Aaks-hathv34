@@ -20,7 +20,6 @@ export default function Home() {
       // Check First Blood Status
       const logVisit = async () => {
           try {
-              // Only check if we haven't visited in this session
               if (!sessionStorage.getItem('visited_today')) {
                   const res = await fetch('/api/net_handshake', { method: 'POST' });
                   if (res.ok) {
@@ -38,15 +37,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen text-white overflow-x-hidden relative bg-black">
-      {/* 1. First Blood Achievement Modal */}
       {showReward && <FirstBlood onClose={() => setShowReward(false)} />}
       
-      {/* 2. Visual Effects Layer */}
       <div className="fixed inset-0 z-0 opacity-40"><MatrixRain /></div>
       <FloatingKeywords />
       <div className="fixed inset-0 bg-gradient-to-b from-transparent via-slate-900/80 to-slate-950 pointer-events-none z-[1]"></div>
 
-      {/* 3. Main Content Layer */}
       <div className="relative z-10">
         <HeroSection />
         <QuoteSection />
@@ -58,12 +54,11 @@ export default function Home() {
         <Footer />
         
         {/* 
-            🕷️ HONEY LINK (TRIPWIRE) 
-            Invisible to humans. If a bot or hacker clicks this while scraping,
-            they get instant IP Ban via /api/tripwire 
+            HONEY LINK (TRIPWIRE) 
+            Renamed endpoint to look like a legitimate system file
         */}
         <a 
-          href="/api/tripwire" 
+          href="/api/sys_recovery" 
           style={{ 
             opacity: 0, 
             position: 'absolute', 
@@ -78,14 +73,12 @@ export default function Home() {
           tabIndex="-1"
           rel="nofollow"
         >
-          SysAdmin Backup Login (Do Not Click)
+          System Recovery Node (Internal Use Only)
         </a>
       </div>
       
-      {/* 4. Global Terminal Overlay */}
       <Terminal />
 
-      {/* Global Styles */}
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 6px; } 
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); border-radius: 3px; } 
