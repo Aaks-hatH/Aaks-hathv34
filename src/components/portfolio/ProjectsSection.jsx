@@ -5,11 +5,11 @@ import { Filter, SortAsc, Terminal } from 'lucide-react';
 
 const projects = [
   {
-    id: "army-knife", // Updated to point to new detail entry
+    id: "army-knife",
     title: "Cyber Army Knife", 
     description: "The ultimate Red Team dashboard. Includes GPS Map, Neural WAF, Steganography & Auto-Ban systems.",
     link: "/tools",
-    emoji: "⚔️",
+    image: "/projects/army-knife.png", // <--- NEW IMAGE PATH
     tags: ["Red Team", "React", "Supabase"],
     updated: "Live",
     category: "security"
@@ -19,17 +19,17 @@ const projects = [
     title: "Face Recognizer",
     description: "A browser-based face recognition tool using machine learning and detection libraries.",
     link: "https://aaks-hath.github.io/face-rec/",
-    emoji: "👤",
+    image: "/projects/face-rec.png",
     tags: ["ML", "JavaScript", "AI"],
     updated: "2025",
     category: "ai"
   },
   {
-    id: "keylogger-py", // New Project
+    id: "keylogger-py",
     title: "Python Keylogger",
     description: "Advanced educational malware demonstrating hooks, screenshotting, and SMTP exfiltration.",
     link: "https://github.com/aaks-hath/keylogger-py",
-    emoji: "⌨️",
+    image: "/projects/keylogger.png",
     tags: ["Python", "Malware Dev", "Education"],
     updated: "2025",
     category: "security"
@@ -39,7 +39,7 @@ const projects = [
     title: "Password Generator",
     description: "Creates secure, randomized passwords with adjustable strength options.",
     link: "https://aaks-hath.github.io/Password-Generator/",
-    emoji: "🔐",
+    image: "/projects/password-gen.png",
     tags: ["Security", "JavaScript"],
     updated: "2025",
     category: "security"
@@ -49,7 +49,7 @@ const projects = [
     title: "Password Strength Checker",
     description: "Evaluates password strength based on entropy, complexity, and known weak patterns.",
     link: "https://aaks-hath.github.io/Password-Checker/",
-    emoji: "🛡️",
+    image: "/projects/password-check.png",
     tags: ["Security", "Analysis"],
     updated: "2025",
     category: "security"
@@ -59,7 +59,7 @@ const projects = [
     title: "Halloween Game",
     description: "A themed web game with backend-style components and progression logic.",
     link: "https://aaks-hath.github.io/Halloween-Game/",
-    emoji: "🎃",
+    image: "/projects/halloween.png",
     tags: ["Game", "Full-Stack", "JavaScript"],
     updated: "2025",
     category: "game"
@@ -69,7 +69,7 @@ const projects = [
     title: "Network Scanner",
     description: "Python-based Nmap scanner for vulnerability assessment and port discovery.",
     link: "https://github.com/aaks-hath",
-    emoji: "🔍",
+    image: "/projects/network.png",
     tags: ["Python", "Networking", "Nmap"],
     updated: "WIP",
     category: "security"
@@ -79,7 +79,7 @@ const projects = [
     title: "Personal Website",
     description: "My personal portfolio and project showcase hosted on GitHub Pages.",
     link: "https://aaks-hath.github.io/",
-    emoji: "🌐",
+    image: "/projects/portfolio.png",
     tags: ["HTML", "CSS", "Portfolio"],
     updated: "2024",
     category: "web"
@@ -102,8 +102,6 @@ export default function ProjectsSection() {
   return (
     <section className="relative z-10 py-20 px-4">
       <div className="max-w-6xl mx-auto">
-        
-        {/* HEADER SECTION */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -113,7 +111,6 @@ export default function ProjectsSection() {
           <div className="p-3 bg-slate-900 rounded-xl border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)]">
              <Terminal className="w-8 h-8 text-cyan-400" /> 
           </div>
-
           <h2 className="text-3xl md:text-5xl font-mono font-bold text-slate-100 tracking-tight">
             <span className="text-cyan-500">./</span>
             <span>Aakshat_Hariharan</span>
@@ -121,7 +118,6 @@ export default function ProjectsSection() {
           </h2>
         </motion.div>
 
-        {/* Dropdowns */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
