@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const ADMIN_ID = "1168575437723680850";
 
-// --- EMAIL HELPER ---
+// --- HELPER: EMAIL ALERT ---
 async function sendEmailAlert(context, subject, message) {
   const serviceId = context.env.EMAILJS_SERVICE_ID;
   const templateId = context.env.EMAILJS_TEMPLATE_ID;
@@ -27,150 +27,195 @@ async function sendEmailAlert(context, subject, message) {
   } catch (e) { console.error("Email Error", e); }
 }
 
+// --- HELPER: VIGILANTE RISK ENGINE ---
+async function calculateRiskScore(supabase, ip, country, userAgent, password) {
+    let score = 0;
+    let reasons = [];
+
+    // 1. VELOCITY CHECK (Last 15 mins)
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60000).toISOString();
+    const { count: failCount } = await supabase
+        .from('audit_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('ip', ip)
+        .eq('action', 'LOGIN_FAIL')
+        .gte('timestamp', fifteenMinsAgo);
+    
+    if (failCount > 0) {
+        const points = failCount * 20; 
+        score += points;
+        reasons.push(`Velocity: ${failCount} recent fails (+${points})`);
+    }
+
+    // 2. TRIPWIRE HISTORY (Have they touched a honey link before?)
+    const { count: tripwireCount } = await supabase
+        .from('audit_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('ip', ip)
+        .like('action', '%TRIPWIRE%'); // Looks for TRIPWIRE actions
+    
+    if (tripwireCount > 0) {
+        score += 100; // Instant Critical Risk
+        reasons.push("CRITICAL: Known Threat Actor (Tripwire History)");
+    }
+
+    // 3. SQL INJECTION SIGNATURES (Did they try to hack the password field?)
+    const sqlPatterns = [
+        /(')/, /(--)/, /(\%27)/, /(\%23)/, /(#)/, /(OR 1=1)/i, /(SELECT)/i, /(UNION)/i
+    ];
+    if (sqlPatterns.some(p => p.test(password))) {
+        score += 50;
+        reasons.push("Attack Signature: SQL Injection Attempt (+50)");
+    }
+
+    // 4. BOT FINGERPRINTING (User Agent Analysis)
+    const botAgents = ['curl', 'python', 'postman', 'httpclient', 'wget', 'axios'];
+    const ua = (userAgent || "").toLowerCase();
+    if (!ua || ua.length < 5) {
+        score += 40;
+        reasons.push("Anomaly: Missing User-Agent (+40)");
+    } else if (botAgents.some(b => ua.includes(b))) {
+        score += 60;
+        reasons.push(`Bot Detected: ${ua} (+60)`);
+    }
+
+    // 5. VAMPIRE RULE (Time of Day Anomaly)
+    // Assuming Admin is asleep 3AM - 6AM EST
+    const date = new Date();
+    // Adjust to EST (UTC-5) approx
+    const estHour = (date.getUTCHours() - 5 + 24) % 24; 
+    if (estHour >= 3 && estHour <= 6) {
+        score += 15;
+        reasons.push("Anomaly: Graveyard Shift Login (+15)");
+    }
+
+    // 6. HIGH RISK GEO
+    if (['RU', 'CN', 'KP', 'IR'].includes(country)) {
+        score += 25;
+        reasons.push(`High Risk Geo: ${country} (+25)`);
+    }
+
+    return { score: Math.min(score, 100), reasons, failCount };
+}
+
 export async function onRequestPost(context) {
   if (context.request.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } });
   
   try {
     const { password, token, captcha, stepUpCode } = await context.request.json();
     
-    // Secrets
+    // Secrets & Config
     const actualPassword = (context.env.ADMIN_PASSWORD || "").trim();
     const totpSecret = (context.env.ADMIN_TOTP_SECRET || "").replace(/\s/g, '');
     const turnstileSecret = context.env.TURNSTILE_SECRET_KEY;
     const sbKey = context.env.SUPABASE_SERVICE_KEY;
     const webhookUrl = context.env.DISCORD_WEBHOOK_URL;
     
+    // Metadata
     const clientIP = context.request.headers.get("CF-Connecting-IP") || "127.0.0.1";
     const country = context.request.headers.get("CF-IPCountry") || "XX";
+    const userAgent = context.request.headers.get("User-Agent");
 
+    // Init Logic
     const sendDiscord = (msg) => {
         if (webhookUrl) context.waitUntil(fetch(webhookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: msg }) }).catch(()=>{}));
     };
-
+    
+    if (!sbKey) return new Response(JSON.stringify({ error: "CONFIG ERROR" }), { status: 500 });
     const supabase = createClient('https://gdlvzfyvgmeyvlcgggix.supabase.co', sbKey);
 
     // ==========================================================
-    // 1. CAPTCHA SESSION CHECK (The Fix)
+    // 🧠 1. VIGILANTE RISK ANALYSIS
     // ==========================================================
-    // Check if this IP passed captcha in the last 5 minutes
-    const fiveMinsAgo = new Date(Date.now() - 5 * 60000).toISOString();
-    const { count: captchaSession } = await supabase
-        .from('audit_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('ip', clientIP)
-        .eq('action', 'CAPTCHA_PASSED')
-        .gte('timestamp', fiveMinsAgo);
+    const { score: riskScore, reasons: riskFactors, failCount } = await calculateRiskScore(supabase, clientIP, country, userAgent, password);
 
-    const hasValidSession = captchaSession > 0;
-
-    // Only verify if we don't have a session
-    if (!hasValidSession) {
-        if (turnstileSecret) {
-            if (!captcha) return new Response(JSON.stringify({ error: "CAPTCHA_REQUIRED" }), { status: 400 });
-            
-            const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ secret: turnstileSecret, response: captcha, remoteip: clientIP })
-            });
-            const d = await verifyRes.json();
-            
-            if (!d.success) return new Response(JSON.stringify({ error: "CAPTCHA_FAILED" }), { status: 403 });
-
-            // LOG SUCCESS TO START SESSION
-            await supabase.from('audit_logs').insert({ 
-                actor_type: 'VISITOR', ip: clientIP, action: 'CAPTCHA_PASSED', details: 'Session Started' 
-            });
-        }
-    }
-
-    // ==========================================================
-    // 2. INTELLIGENT THREAT DETECTION
-    // ==========================================================
-    const fifteenMinsAgo = new Date(Date.now() - 15 * 60000).toISOString();
-    const { count: failCount } = await supabase
-        .from('audit_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('ip', clientIP)
-        .eq('action', 'LOGIN_FAIL')
-        .gte('timestamp', fifteenMinsAgo);
-
-    // AUTO-BAN (5+ Failures)
-    if (failCount >= 5) {
+    // 🔴 CRITICAL RISK (Score >= 80) -> AUTO BAN
+    if (riskScore >= 80) {
         const { data: isBanned } = await supabase.from('banned_ips').select('ip').eq('ip', clientIP).maybeSingle();
         if (!isBanned) {
-            await supabase.from('banned_ips').insert({ ip: clientIP, reason: "Auto-Ban: Brute Force" });
-            await supabase.from('audit_logs').insert({ actor_type: 'ATTACKER', ip: clientIP, action: 'AUTO_BAN', details: `Failures: ${failCount}` });
+            await supabase.from('banned_ips').insert({ ip: clientIP, reason: `SIEM: Risk Score ${riskScore}` });
+            await supabase.from('audit_logs').insert({ 
+                actor_type: 'ATTACKER', ip: clientIP, action: 'AUTO_BAN', details: `Score: ${riskScore} | ${riskFactors.join(', ')}` 
+            });
             
-            sendDiscord(`<@${ADMIN_ID}>\n**🚨 AUTO-BAN**\nTarget: ${clientIP}\nFails: ${failCount}`);
-            context.waitUntil(sendEmailAlert(context, "CRITICAL: Auto-Ban Executed", `Target IP: ${clientIP} banned after ${failCount} failed login attempts.`));
+            const msg = `**🚨 SIEM BAN EXECUTION**\n**Target:** ${clientIP} (${country})\n**Risk Score:** ${riskScore}/100\n**Reasons:**\n- ${riskFactors.join('\n- ')}`;
+            sendDiscord(`<@${ADMIN_ID}>\n${msg}`);
+            context.waitUntil(sendEmailAlert(context, "CRITICAL: SIEM Ban", msg));
         }
-        return new Response(JSON.stringify({ error: "ACCESS DENIED: IP BANNED" }), { status: 403 });
+        return new Response(JSON.stringify({ error: "ACCESS DENIED: HIGH RISK DETECTED" }), { status: 403 });
     }
 
     // ==========================================================
-    // 3. DEAD MAN SWITCH
+    // 🔐 2. STANDARD CHECKS
     // ==========================================================
+
+    // CAPTCHA (Skip if trusted session exists)
+    const fiveMinsAgo = new Date(Date.now() - 5 * 60000).toISOString();
+    const { count: captchaSession } = await supabase.from('audit_logs').select('*', { count: 'exact', head: true }).eq('ip', clientIP).eq('action', 'CAPTCHA_PASSED').gte('timestamp', fiveMinsAgo);
+
+    if (captchaSession === 0 && turnstileSecret) {
+        if (!captcha) return new Response(JSON.stringify({ error: "CAPTCHA_REQUIRED" }), { status: 400 });
+        const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ secret: turnstileSecret, response: captcha, remoteip: clientIP })
+        });
+        const d = await verifyRes.json();
+        if (!d.success) return new Response(JSON.stringify({ error: "CAPTCHA_FAILED" }), { status: 403 });
+        await supabase.from('audit_logs').insert({ actor_type: 'VISITOR', ip: clientIP, action: 'CAPTCHA_PASSED', details: 'Session Validated' });
+    }
+
+    // DEAD MAN SWITCH
     const { data: status } = await supabase.from('admin_status').select('is_online, last_heartbeat').eq('id', 1).single();
     const now = new Date();
     const lastBeat = new Date(status?.last_heartbeat || 0);
     const diffSeconds = (now - lastBeat) / 1000;
-
     if (!status || status.is_online !== true || diffSeconds > 120) {
          return new Response(JSON.stringify({ error: "SECURITY LOCKOUT: HUD OFFLINE" }), { status: 403 });
     }
 
-    // ==========================================================
-    // 4. PASSWORD CHECK
-    // ==========================================================
+    // PASSWORD
     if (password !== actualPassword) {
-       await supabase.from('audit_logs').insert({ 
-           actor_type: 'ATTACKER', ip: clientIP, action: 'LOGIN_FAIL', details: 'Wrong Password' 
-       });
+       await supabase.from('audit_logs').insert({ actor_type: 'ATTACKER', ip: clientIP, action: 'LOGIN_FAIL', details: 'Wrong Password' });
        
-       sendDiscord(`<@${ADMIN_ID}>\n**Login Failed:** Bad Password\n**Source:** ${clientIP}`);
+       // Adaptive Delay: Higher Risk = Slower Response (Frustrate attackers)
+       const delay = 2000 + (riskScore * 50); 
+       await new Promise(r => setTimeout(r, delay));
        
-       // Artificial Delay to stop timing attacks
-       await new Promise(r => setTimeout(r, 2000));
-       
+       sendDiscord(`<@${ADMIN_ID}>\n**Login Failed**\nIP: ${clientIP}\nRisk Score: ${riskScore}`);
        return new Response(JSON.stringify({ error: "PASSWORD_INCORRECT" }), { status: 401 });
     }
 
     // ==========================================================
-    // 5. ADAPTIVE STEP-UP AUTH (Suspicious Activity)
+    // 🟡 3. SUSPICIOUS CHECK (Score 30-79) -> STEP UP
     // ==========================================================
-    // If user has > 1 recent failures (even if they got password right now), trigger Step-Up
-    // UNLESS they already provided the correct step-up code
+    // We check this AFTER password is confirmed to avoid enumeration, but BEFORE letting them in.
     
     let isStepUpVerified = false;
-
-    // A. Check if code was provided
     if (stepUpCode) {
         const { data: storedCode } = await supabase.from('system_config').select('value').eq('key', 'temp_auth_code').single();
         if (!storedCode || storedCode.value !== stepUpCode) {
             await supabase.from('audit_logs').insert({ actor_type: 'ATTACKER', ip: clientIP, action: 'LOGIN_FAIL', details: 'Wrong Step-Up Code' });
             return new Response(JSON.stringify({ error: "INVALID_VERIFICATION_CODE" }), { status: 401 });
         }
-        // Burn the code so it can't be reused
         await supabase.from('system_config').delete().eq('key', 'temp_auth_code');
         isStepUpVerified = true;
     }
 
-    // B. Trigger Challenge if suspicious AND not yet verified
-    if (failCount >= 2 && !isStepUpVerified) {
+    // Trigger Challenge?
+    if ((riskScore >= 30 || failCount >= 2) && !isStepUpVerified) {
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         await supabase.from('system_config').upsert({ key: 'temp_auth_code', value: code });
         
-        sendDiscord(`<@${ADMIN_ID}>\n**🛡️ SUSPICIOUS LOGIN**\n**Reason:** ${failCount} prior failures.\n**Verification Code:** \`${code}\``);
+        sendDiscord(`<@${ADMIN_ID}>\n**🛡️ SIEM CHALLENGE**\n**Risk Score:** ${riskScore}\n**Factors:** ${riskFactors.join(', ')}\n**Code:** \`${code}\``);
         
-        // Return 200 OK but with 'stepUp' flag
         return new Response(JSON.stringify({ 
             stepUp: true, 
-            message: "Suspicious activity detected. Verification code sent to secure channel." 
+            message: `Security Anomaly (Risk Score: ${riskScore}). Verify Identity.` 
         }), { status: 200 });
     }
 
     // ==========================================================
-    // 6. TOTP (2FA) CHECK
+    // 4. FINAL 2FA & SUCCESS
     // ==========================================================
     if (totpSecret) {
         const totp = new OTPAuth.TOTP({ algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(totpSecret) });
@@ -181,11 +226,8 @@ export async function onRequestPost(context) {
         }
     }
 
-    // ==========================================================
-    // SUCCESS
-    // ==========================================================
-    await supabase.from('audit_logs').insert({ actor_type: 'ADMIN', ip: clientIP, action: 'LOGIN_SUCCESS', details: 'Session Started' });
-    sendDiscord(`<@${ADMIN_ID}>\n**Success:** Admin logged in.\n**IP:** ${clientIP}`);
+    await supabase.from('audit_logs').insert({ actor_type: 'ADMIN', ip: clientIP, action: 'LOGIN_SUCCESS', details: `SIEM Cleared (Score: ${riskScore})` });
+    sendDiscord(`<@${ADMIN_ID}>\n**Login Success**\nIP: ${clientIP}\nSIEM Score: ${riskScore}`);
     
     return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
 
