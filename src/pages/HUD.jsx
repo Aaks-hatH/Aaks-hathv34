@@ -42,21 +42,12 @@ export default function HUD() {
     } catch (err) { setError("CONNECTION ERROR"); } finally { setLoading(false); }
   };
 
- // 2. LISTEN TO LOGS (Updated to use 'live_feed')
-    const logSub = supabase.channel('hud-logs')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_feed' }, (p) => {
-        const newLog = p.new;
-        setLogs(prev => [newLog, ...prev].slice(0, 20));
-        
-        if (newLog.actor_type === 'ATTACKER' || newLog.action.includes('BAN')) {
-            setThreatLevel('CRITICAL');
-            playSound('ALARM');
-            setTimeout(() => setThreatLevel('NORMAL'), 5000);
-        } else {
-            playSound('BLEEP');
-        }
-      })
-      .subscribe();
+  useEffect(() => {
+    if (!auth) return;
+    
+    let wakeLock = null;
+    const requestWakeLock = async () => { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {} };
+    requestWakeLock();
 
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
@@ -64,11 +55,19 @@ export default function HUD() {
     sendHeartbeat();
     const hbInt = setInterval(sendHeartbeat, 30000);
 
-    // REMOVED: The logic that changed document.title to "CONNECTION PAUSED"
+    const handleVisibilityChange = () => {
+      if (document.hidden) document.title = "⚠️ CONNECTION PAUSED";
+      else {
+        document.title = "HUD ONLINE";
+        sendHeartbeat();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     const presence = supabase.channel('online-users').on('presence', { event: 'sync' }, () => setVisitors(Object.keys(presence.presenceState()).length)).subscribe();
 
-    const logSub = supabase.channel('hud-logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, (p) => {
+    // UPDATED: Now listens to 'live_feed' instead of 'audit_logs' because of the security lock
+    const logSub = supabase.channel('hud-logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_feed' }, (p) => {
         setLogs(prev => [p.new, ...prev].slice(0, 20));
         if (p.new.actor_type === 'ATTACKER' || p.new.action.includes('BAN')) { setThreatLevel('CRITICAL'); playSound('ALARM'); setTimeout(() => setThreatLevel('NORMAL'), 5000); } else { playSound('BLEEP'); }
     }).subscribe();
@@ -82,6 +81,7 @@ export default function HUD() {
     return () => { 
         clearInterval(timer); clearInterval(hbInt); clearInterval(deviceCheck);
         supabase.removeChannel(presence); supabase.removeChannel(logSub); supabase.removeChannel(deviceSub);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [auth, task, deviceData.lastSeen]);
 
