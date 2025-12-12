@@ -1,4 +1,4 @@
-limport { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 export async function onRequestPost(context) {
   try {
