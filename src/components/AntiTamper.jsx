@@ -1,96 +1,93 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Eye } from 'lucide-react';
+import { AlertTriangle, Eye, Lock, FileX, MousePointer2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AntiTamper() {
   const [warning, setWarning] = useState(null);
+  const [icon, setIcon] = useState(null); // Dynamic icon based on threat
 
-  // Helper to log the incident to your backend
-  const logIncident = (type) => {
-    // 1. Console "Psychological Warfare"
+  const logIncident = (type, customIcon) => {
+    // 1. Console Psy-Op
     if (type.includes('DevTools')) {
       console.clear();
-      console.log(
-        "%c⛔ SECURITY ALERT ⛔", 
-        "color: red; font-size: 30px; font-weight: bold; text-shadow: 2px 2px black;"
-      );
-      console.log(
-        "%cYour IP and Actions are being logged by the Vigilante Security System.", 
-        "color: white; font-size: 16px; background: black; padding: 5px;"
-      );
+      console.log("%c⛔ SECURITY ALERT ⛔", "color: red; font-size: 30px; font-weight: bold;");
     }
 
-    // 2. Send to Backend
+    // 2. Telemetry
     const data = JSON.stringify({
       actor_type: 'SUSPICIOUS_VISITOR',
       action: 'RECON_ATTEMPT',
       details: `Trigger: ${type}`
     });
     
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon('/api/collect_telemetry', data);
-    } else {
-      fetch('/api/collect_telemetry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: data
-      }).catch(() => {});
-    }
+    if (navigator.sendBeacon) navigator.sendBeacon('/api/collect_telemetry', data);
+    else fetch('/api/collect_telemetry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data }).catch(() => {});
 
-    // 3. Show UI Warning
+    // 3. UI Feedback
+    setIcon(customIcon || <AlertTriangle className="w-5 h-5 text-red-500" />);
     setWarning(type);
-    
-    // Hide warning after 3 seconds
     setTimeout(() => setWarning(null), 3000);
   };
 
   useEffect(() => {
-    // A. PASSIVE Right Click (Detects but allows)
-    const handleContextMenu = () => {
-      // e.preventDefault(); <--- WE REMOVED THIS (Allows the menu)
-      logIncident('Context Menu / Inspection');
+    // A. Context Menu (Passive Monitor)
+    const handleContextMenu = () => logIncident('Context Menu Scan', <Eye className="w-5 h-5 text-yellow-500" />);
+
+    // B. Data Exfiltration (Copy/Cut)
+    const handleCopy = () => logIncident('Clipboard Exfiltration', <Eye className="w-5 h-5 text-red-400" />);
+
+    // C. Asset Theft (Drag & Drop)
+    const handleDragStart = (e) => {
+        e.preventDefault(); // BLOCK dragging images
+        logIncident('Asset Extraction Attempt', <Lock className="w-5 h-5 text-orange-500" />);
     };
 
-    // B. Detect DevTools Shortcuts (F12, Ctrl+Shift+I)
+    // D. Keyboard Shortcuts (Save, Print, Source)
     const handleKeyDown = (e) => {
-      if (
-        e.key === 'F12' || 
-        (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key.toUpperCase())) ||
-        (e.ctrlKey && e.key.toUpperCase() === 'U')
-      ) {
-        // We still block these because they open the pane immediately
-        // e.preventDefault(); // Optional: Uncomment to block F12
-        logIncident('DevTools Shortcut Triggered');
+      // F12 or Ctrl+Shift+I/J/C (DevTools)
+      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key.toUpperCase()))) {
+        logIncident('DevTools Shortcut');
+      }
+      
+      // Ctrl+S (Save Page)
+      if (e.ctrlKey && e.key.toLowerCase() === 's') {
+        e.preventDefault(); // BLOCK Saving
+        logIncident('Source Code Dump (Ctrl+S)', <FileX className="w-5 h-5 text-red-600" />);
+      }
+
+      // Ctrl+P (Print)
+      if (e.ctrlKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault(); // BLOCK Printing
+        logIncident('Print-to-PDF Scrape', <FileX className="w-5 h-5 text-red-600" />);
+      }
+
+      // Ctrl+U (View Source)
+      if (e.ctrlKey && e.key.toLowerCase() === 'u') {
+        e.preventDefault(); // BLOCK Source View
+        logIncident('Source Code Inspection', <Code className="w-5 h-5 text-red-500" />);
       }
     };
 
-    // C. Detect Copy/Cut (Data Exfiltration)
-    const handleCopy = () => {
-        logIncident('Clipboard Copy / Exfiltration');
+    // E. Touch Gestures (Mobile/Tablet Hybrid)
+    const handleTouchStart = (e) => {
+      if (e.touches.length > 2) logIncident('Multi-Touch Probe', <MousePointer2 className="w-5 h-5 text-blue-400" />);
     };
 
-    // D. Console Trap (Debugger)
-    // This slows down the script if DevTools is open
-    const antiDebug = setInterval(() => {
-        const start = performance.now();
-        // debugger; // <--- Uncomment this line to PAUSE hackers (Aggressive)
-        const end = performance.now();
-        if (end - start > 100) {
-            logIncident('DevTools Debugger Attached');
-        }
-    }, 2000);
-
+    // Attach Listeners
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('copy', handleCopy);
     document.addEventListener('cut', handleCopy);
+    document.addEventListener('dragstart', handleDragStart); // Added Drag Block
+    document.addEventListener('touchstart', handleTouchStart);
 
     return () => {
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('copy', handleCopy);
       document.removeEventListener('cut', handleCopy);
-      clearInterval(antiDebug);
+      document.removeEventListener('dragstart', handleDragStart);
+      document.removeEventListener('touchstart', handleTouchStart);
     };
   }, []);
 
@@ -101,15 +98,17 @@ export default function AntiTamper() {
           initial={{ opacity: 0, y: 50, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 50, scale: 0.9 }}
-          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-slate-900/90 border border-red-500 text-red-100 px-6 py-3 rounded-lg shadow-[0_0_50px_rgba(220,38,38,0.4)] backdrop-blur-md flex items-center gap-4 min-w-[320px]"
+          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-slate-900/95 border border-red-500/50 text-red-100 px-6 py-3 rounded-lg shadow-[0_0_50px_rgba(220,38,38,0.4)] backdrop-blur-md flex items-center gap-4 min-w-[320px]"
         >
-          <div className="bg-red-500/20 p-2 rounded-full animate-pulse border border-red-500/50">
-            {warning.includes('Clipboard') ? <Eye className="w-5 h-5 text-red-400" /> : <AlertTriangle className="w-5 h-5 text-red-500" />}
+          <div className="bg-red-500/10 p-2 rounded-full border border-red-500/30">
+            {icon}
           </div>
           <div>
-            <h4 className="font-bold text-xs tracking-[0.2em] text-red-500 mb-1">SURVEILLANCE ACTIVE</h4>
-            <p className="text-[10px] font-mono text-slate-400">
-              LOGGED: <span className="text-white">{warning}</span>
+            <h4 className="font-bold text-[10px] tracking-[0.2em] text-red-500 mb-1 uppercase">
+              Security Protocol Active
+            </h4>
+            <p className="text-xs font-mono text-slate-300">
+              Intervention: <span className="text-white font-bold">{warning}</span>
             </p>
           </div>
         </motion.div>
