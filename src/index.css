@@ -5,5 +5,46 @@
 @layer base {
   body {
     @apply bg-slate-950 text-slate-50;
+    
+    /* 🛑 UNIVERSAL NO-SELECT (Desktop & Mobile) */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    
+    /* 🖱️ CURSOR HARDENING: Default to 'default', not 'text' */
+    cursor: default;
+  }
+
+  /* Allow typing in forms */
+  input, textarea {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
+
+  /* Clickable things show the pointer */
+  a, button, [role="button"] {
+    cursor: pointer;
+  }
+}
+
+/* 🖨️ PRINT PROTECTION LAYER */
+@media print {
+  html, body {
+    display: none !important; /* Hide everything */
+    background: #000 !important;
+  }
+  /* Optional: Show a message on the printed paper */
+  body:before {
+    content: "RESTRICTED DOCUMENT // DO NOT PRINT";
+    display: block !important;
+    color: #000; /* Printers usually print black on white paper */
+    font-size: 24pt;
+    font-weight: bold;
+    text-align: center;
+    padding-top: 100px;
   }
 }
