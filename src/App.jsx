@@ -44,7 +44,7 @@ function App() {
           <Route path="/tools" element={<ToolsDashboard />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/hud" element={<HUD />} />
-          <Route path="/login element-{<FakeLogin />} />
+          <Route path="/login" element={<FakeLogin />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
