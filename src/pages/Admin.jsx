@@ -7,20 +7,12 @@ import {
   Megaphone, RefreshCw, Ban, Terminal as TermIcon, 
   Globe, MapPin, Unlock, FileText, Activity, BarChart3
 } from 'lucide-react';
-
-// MAP IMPORTS
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid } from 'recharts';
 
-// CHART IMPORTS
-import { 
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  AreaChart, Area, CartesianGrid 
-} from 'recharts';
-
-// --- CUSTOM MARKER SETUP ---
 const customMarkerIcon = new L.DivIcon({
   html: renderToStaticMarkup(<MapPin className="w-6 h-6 text-cyan-500 drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" fill="currentColor" />),
   className: 'bg-transparent border-none',
@@ -30,7 +22,6 @@ const customMarkerIcon = new L.DivIcon({
 });
 
 export default function Admin() {
-  // --- AUTH & STATE ---
   const [auth, setAuth] = useState(false);
   const [password, setPassword] = useState('');
   const [totp, setTotp] = useState('');
@@ -40,7 +31,6 @@ export default function Admin() {
   const [stepUpRequired, setStepUpRequired] = useState(false);
   const [stepUpCode, setStepUpCode] = useState('');
   
-  // --- DATA ---
   const [activeTab, setActiveTab] = useState('LIVE_TRAFFIC');
   const [messages, setMessages] = useState([]);
   const [visitors, setVisitors] = useState({});
@@ -50,21 +40,14 @@ export default function Admin() {
   const [broadcastMsg, setBroadcastMsg] = useState('');
   const [cmd, setCmd] = useState('');
 
-  // --- 1. DATA FETCHING ---
   const refreshSecureData = async () => {
     if (!password) return; 
     try {
-        const banRes = await fetch('/api/data_fetch', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password, table: 'banned_ips' })
-        });
+        const banRes = await fetch('/api/data_fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, table: 'banned_ips' }) });
         const banData = await banRes.json();
         if (banData.data) setBannedIps(banData.data);
 
-        const logRes = await fetch('/api/data_fetch', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password, table: 'audit_logs' })
-        });
+        const logRes = await fetch('/api/data_fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, table: 'audit_logs' }) });
         const logData = await logRes.json();
         if (logData.data) setAuditLogs(logData.data);
     } catch (e) { console.error("Secure fetch failed", e); }
@@ -77,7 +60,6 @@ export default function Admin() {
     if (data) setMaintenance(data.value === 'true');
   };
 
-  // --- 2. LISTENERS ---
   useEffect(() => {
     if (!auth) return;
     const presenceChannel = supabase.channel('online-users');
@@ -85,42 +67,20 @@ export default function Admin() {
         const state = presenceChannel.presenceState();
         setVisitors({ ...state });
     };
-    presenceChannel
-      .on('presence', { event: 'sync' }, updateVisitors)
-      .on('presence', { event: 'join' }, updateVisitors)
-      .on('presence', { event: 'leave' }, updateVisitors)
-      .subscribe();
-
-    refreshPublicData();
-    refreshSecureData();
+    presenceChannel.on('presence', { event: 'sync' }, updateVisitors).on('presence', { event: 'join' }, updateVisitors).on('presence', { event: 'leave' }, updateVisitors).subscribe();
+    refreshPublicData(); refreshSecureData();
     const interval = setInterval(refreshSecureData, 5000);
     return () => { clearInterval(interval); supabase.removeChannel(presenceChannel); };
   }, [auth]);
 
-  // --- 3. CHART DATA PROCESSING ---
   const chartStats = useMemo(() => {
     const attackCount = auditLogs.filter(l => l.actor_type === 'ATTACKER').length;
     const visitorCount = auditLogs.filter(l => l.actor_type === 'VISITOR').length;
     const adminCount = auditLogs.filter(l => l.actor_type === 'ADMIN').length;
-
-    // Last 10 Logs for Timeline
-    const timelineData = auditLogs.slice(0, 20).reverse().map((l, i) => ({
-      name: i,
-      time: new Date(l.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-      type: l.actor_type === 'ATTACKER' ? 100 : 20
-    }));
-
-    return { 
-        barData: [
-            { name: 'Visitors', value: visitorCount, fill: '#06b6d4' }, // Cyan
-            { name: 'Attacks', value: attackCount, fill: '#ef4444' },   // Red
-            { name: 'Admin', value: adminCount, fill: '#22c55e' }       // Green
-        ],
-        timeline: timelineData
-    };
+    const timelineData = auditLogs.slice(0, 20).reverse().map((l, i) => ({ name: i, time: new Date(l.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), type: l.actor_type === 'ATTACKER' ? 100 : 20 }));
+    return { barData: [{ name: 'Visitors', value: visitorCount, fill: '#06b6d4' }, { name: 'Attacks', value: attackCount, fill: '#ef4444' }, { name: 'Admin', value: adminCount, fill: '#22c55e' }], timeline: timelineData };
   }, [auditLogs]);
 
-  // --- 4. ACTIONS ---
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!turnstileToken) { setError("ANTI-BOT CHECK REQUIRED"); return; }
@@ -129,9 +89,14 @@ export default function Admin() {
       const payload = { password, token: totp, captcha: turnstileToken, stepUpCode: stepUpRequired ? stepUpCode : null };
       const res = await fetch('/api/auth_handshake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
+      
       if (data.stepUp) {
-          setStepUpRequired(true); setError("SUSPICIOUS ACTIVITY: Check secure channel."); setLoading(false); return;
+          setStepUpRequired(true); 
+          setError(data.message || "Security Check Required"); 
+          setLoading(false); 
+          return;
       }
+      
       if (data.success) setAuth(true);
       else {
         setError(data.error || 'FAILED'); 
@@ -146,30 +111,25 @@ export default function Admin() {
     setMaintenance(newState); 
     await fetch('/api/sys_config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, key: 'maintenance_mode', value: String(newState) }) });
   };
-
   const executeCommand = async (payload) => {
     const uniquePayload = `${payload}|${Date.now()}`;
     await fetch('/api/sys_config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, key: 'system_command', value: uniquePayload }) });
     setCmd('');
   };
-
   const banUser = async (ip) => {
     if(!confirm(`BAN IP: ${ip}?`)) return;
     await fetch('/api/net_block', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, ip, reason: "Admin Manual Ban" }) });
     alert(`Target ${ip} blacklisted.`); setTimeout(refreshSecureData, 1000);
   };
-
   const unbanUser = async (ip) => {
     await fetch('/api/net_release', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, ip }) });
     setTimeout(refreshSecureData, 1000);
   };
-
   const handleDelete = async (id) => {
     if(!confirm("DELETE?")) return;
     setMessages(prev => prev.filter(m => m.id !== id));
     await fetch('/api/data_purge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, id }) });
   };
-
   const sendBroadcast = async () => {
     if(!broadcastMsg) return;
     await fetch('/api/sys_config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, key: 'system_broadcast', value: broadcastMsg }) });
@@ -210,20 +170,12 @@ export default function Admin() {
           <div><h1 className="text-xl text-white tracking-widest">OVERWATCH_CONSOLE</h1><p className="text-xs text-cyan-600">ACTIVE_AGENTS: {Object.keys(visitors).length}</p></div>
           <button onClick={() => setAuth(false)} className="text-xs text-red-500 border border-red-900 px-3 py-1 hover:bg-red-900 hover:text-white transition-colors">[ DISCONNECT ]</button>
         </header>
-
         <div className="grid grid-cols-5 gap-1 mb-8">
-          {['LIVE_TRAFFIC', 'SECURITY_LOGS', 'NETWORK_OPS', 'DATABASE', 'AUDIT_LOGS'].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`py-2 text-[10px] md:text-xs font-bold transition-all ${activeTab===tab ? 'bg-slate-100 text-black' : 'bg-slate-900 hover:bg-slate-800 text-slate-500'}`}>{tab}</button>
-          ))}
+          {['LIVE_TRAFFIC', 'SECURITY_LOGS', 'NETWORK_OPS', 'DATABASE', 'AUDIT_LOGS'].map(tab => (<button key={tab} onClick={() => setActiveTab(tab)} className={`py-2 text-[10px] md:text-xs font-bold transition-all ${activeTab===tab ? 'bg-slate-100 text-black' : 'bg-slate-900 hover:bg-slate-800 text-slate-500'}`}>{tab}</button>))}
         </div>
-
         {activeTab === 'LIVE_TRAFFIC' && (
           <div className="space-y-6">
-            
-            {/* --- TOP ROW: MAP + ANALYTICS --- */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* 1. WAR ROOM MAP */}
                 <div className="lg:col-span-2 border border-slate-800 bg-slate-950 rounded overflow-hidden relative z-0 h-[400px]">
                     <div className="absolute top-2 left-2 z-[999] bg-slate-900/80 p-2 border border-slate-700 text-xs text-green-400 rounded">WAR_ROOM VIEW</div>
                     <MapContainer key={activeTab} center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%', background: '#020617' }}>
@@ -232,52 +184,23 @@ export default function Admin() {
                             const u = v[0];
                             if (!u.coords || typeof u.coords !== 'string' || !u.coords.includes(',')) return null;
                             const [lat, lon] = u.coords.split(',').map(Number);
-                            return (
-                                <Marker key={u.id} position={[lat, lon]} icon={customMarkerIcon}>
-                                    <Popup className="font-mono text-xs text-black">
-                                        <div className="font-bold">{u.ip || 'Unknown IP'}</div>
-                                        <div>{u.geo}</div>
-                                        <div className="text-[10px] text-slate-500">{u.path}</div>
-                                    </Popup>
-                                </Marker>
-                            );
+                            return (<Marker key={u.id} position={[lat, lon]} icon={customMarkerIcon}><Popup className="font-mono text-xs text-black"><div className="font-bold">{u.ip || 'Unknown IP'}</div><div>{u.geo}</div><div className="text-[10px] text-slate-500">{u.path}</div></Popup></Marker>);
                         })}
                     </MapContainer>
                 </div>
-
-                {/* 2. THREAT ANALYTICS (CHARTS) */}
                 <div className="border border-slate-800 bg-slate-950 rounded p-4 h-[400px] flex flex-col">
                     <h3 className="text-xs text-slate-500 mb-4 flex items-center gap-2"><BarChart3 className="w-4 h-4" /> THREAT_RADAR</h3>
-                    
                     <div className="flex-1 min-h-0">
                         <ResponsiveContainer width="100%" height="50%">
-                            <BarChart data={chartStats.barData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
-                                <XAxis dataKey="name" fontSize={10} stroke="#94a3b8" />
-                                <Tooltip contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '12px'}} />
-                                <Bar dataKey="value" />
-                            </BarChart>
+                            <BarChart data={chartStats.barData}><CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} /><XAxis dataKey="name" fontSize={10} stroke="#94a3b8" /><Tooltip contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '12px'}} /><Bar dataKey="value" /></BarChart>
                         </ResponsiveContainer>
-                        
                         <div className="h-4"></div>
-
                         <ResponsiveContainer width="100%" height="40%">
-                            <AreaChart data={chartStats.timeline}>
-                                <defs>
-                                    <linearGradient id="colorThreat" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
-                                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                                    </linearGradient>
-                                </defs>
-                                <Tooltip contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '12px'}} />
-                                <Area type="monotone" dataKey="type" stroke="#ef4444" fillOpacity={1} fill="url(#colorThreat)" />
-                            </AreaChart>
+                            <AreaChart data={chartStats.timeline}><defs><linearGradient id="colorThreat" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/><stop offset="95%" stopColor="#ef4444" stopOpacity={0}/></linearGradient></defs><Tooltip contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '12px'}} /><Area type="monotone" dataKey="type" stroke="#ef4444" fillOpacity={1} fill="url(#colorThreat)" /></AreaChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
             </div>
-
-            {/* --- VISITOR TABLE --- */}
             <div className="border border-slate-800 bg-slate-950 min-h-[300px]">
               <div className="p-2 border-b border-slate-800 bg-slate-900/50 text-xs text-slate-500 flex justify-between"><span>SIGNAL_INTERCEPT</span><Activity className="w-3 h-3 text-green-500 animate-pulse" /></div>
               <table className="w-full text-left text-xs text-slate-400">
@@ -286,87 +209,17 @@ export default function Admin() {
                   {Object.values(visitors).map(v => {
                       const u = v[0];
                       const isBanned = bannedIps.some(b => b.ip === u.ip);
-                      return (
-                          <tr key={u.id} className="hover:bg-slate-900/50 transition-colors border-b border-slate-900">
-                              <td className="p-3"><div className="text-cyan-500 font-bold mb-1">{u.ip || 'Unknown'}</div><div className="text-slate-600 flex items-center gap-1"><MapPin className="w-3 h-3"/> {u.geo || 'Unknown'}</div></td>
-                              <td className="p-3 text-white">{u.path}</td>
-                              <td className="p-3 text-slate-500 truncate max-w-[150px]">{u.ua}</td>
-                              <td className="p-3 text-right">{isBanned ? <span className="text-red-500 font-bold text-[10px]">BANNED</span> : <button onClick={() => banUser(u.ip)} className="text-red-500 border border-red-900 px-2 py-1 hover:bg-red-600 hover:text-white text-[10px] transition-colors">[ BAN ]</button>}</td>
-                          </tr>
-                      );
+                      return (<tr key={u.id} className="hover:bg-slate-900/50 transition-colors border-b border-slate-900"><td className="p-3"><div className="text-cyan-500 font-bold mb-1">{u.ip || 'Unknown'}</div><div className="text-slate-600 flex items-center gap-1"><MapPin className="w-3 h-3"/> {u.geo || 'Unknown'}</div></td><td className="p-3 text-white">{u.path}</td><td className="p-3 text-slate-500 truncate max-w-[150px]">{u.ua}</td><td className="p-3 text-right">{isBanned ? <span className="text-red-500 font-bold text-[10px]">BANNED</span> : <button onClick={() => banUser(u.ip)} className="text-red-500 border border-red-900 px-2 py-1 hover:bg-red-600 hover:text-white text-[10px] transition-colors">[ BAN ]</button>}</td></tr>);
                   })}
                 </tbody>
               </table>
-              {Object.keys(visitors).length === 0 && <div className="p-12 text-center text-slate-700 text-xs">NO_ACTIVE_SIGNALS</div>}
             </div>
           </div>
         )}
-
-        {/* ... (Other Tabs: SECURITY_LOGS, NETWORK_OPS, etc. - Kept same as previous) ... */}
-        {activeTab === 'SECURITY_LOGS' && (
-            <div className="border border-slate-800 bg-slate-950 h-[500px] overflow-y-auto custom-scrollbar">
-                <div className="p-3 bg-red-950/20 text-red-500 text-xs font-bold border-b border-slate-800 flex items-center gap-2 sticky top-0 backdrop-blur-md"><Ban className="w-4 h-4"/> BLACKLISTED_TARGETS ({bannedIps.length})</div>
-                {bannedIps.map(ban => (
-                    <div key={ban.ip} className="flex justify-between items-center p-3 border-b border-slate-800/50 hover:bg-slate-900/30">
-                        <div className="text-xs"><div className="text-white font-mono text-sm">{ban.ip}</div><div className="text-[10px] text-slate-500">{new Date(ban.banned_at).toLocaleString()}</div><div className="text-[10px] text-red-400">{ban.reason}</div></div>
-                        <button onClick={() => unbanUser(ban.ip)} className="flex items-center gap-1 text-green-500 border border-green-900 px-3 py-1 text-[10px] hover:bg-green-900 hover:text-white transition-colors"><Unlock className="w-3 h-3" /> UNBAN</button>
-                    </div>
-                ))}
-            </div>
-        )}
-
-        {activeTab === 'NETWORK_OPS' && (
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="border border-slate-800 p-6 bg-slate-950">
-                <h3 className="text-sm text-green-500 mb-4 border-b border-green-900/30 pb-2 flex items-center gap-2"><TermIcon className="w-4 h-4"/> REMOTE_EXECUTION</h3>
-                <div className="space-y-4">
-                    <div className="flex gap-2">
-                        <button onClick={() => executeCommand('RELOAD')} className="flex-1 text-[10px] bg-slate-900 px-2 py-2 border border-slate-700 hover:text-white text-slate-300 transition-colors">Force Reload</button>
-                        <button onClick={() => executeCommand('RICKROLL')} className="flex-1 text-[10px] bg-slate-900 px-2 py-2 border border-slate-700 hover:text-white text-slate-300 transition-colors">Rickroll</button>
-                    </div>
-                    <div className="flex items-center bg-black border border-slate-800 p-2"><span className="text-green-500 mr-2">{">"}</span><input value={cmd} onChange={e => setCmd(e.target.value)} onKeyDown={e => e.key === 'Enter' && executeCommand(`ALERT:${cmd}`)} className="bg-transparent border-none outline-none text-white text-xs w-full font-mono" placeholder="Type alert..." /></div>
-                </div>
-                <div className="mt-8 border-t border-slate-800 pt-6">
-                    <h3 className="text-sm text-white mb-4">DEFCON LEVEL</h3>
-                    <div className="flex gap-1">{[5, 4, 3, 2, 1].map(level => (<button key={level} onClick={() => changeDefcon(level)} className={`flex-1 py-2 text-xs font-bold border transition-colors ${level === 1 ? 'border-red-600 text-red-600 hover:bg-red-950' : 'border-slate-700 text-slate-500 hover:bg-slate-800 hover:text-white'}`}>{level}</button>))}</div>
-                </div>
-            </div>
-            <div className="space-y-6">
-                <div className={`border p-6 text-center transition-colors ${maintenance ? 'border-red-500 bg-red-950/10' : 'border-slate-800 bg-slate-950'}`}>
-                    <ShieldAlert className={`w-12 h-12 mx-auto mb-4 ${maintenance ? 'text-red-500 animate-pulse' : 'text-slate-600'}`} />
-                    <button onClick={toggleMaintenance} className={`px-6 py-3 text-xs font-bold tracking-widest border transition-all ${maintenance ? 'bg-red-600 text-white border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 'text-red-500 border-red-900 hover:bg-red-950'}`}>{maintenance ? "DISENGAGE LOCKDOWN" : "INITIATE LOCKDOWN"}</button>
-                </div>
-                <div className="border border-slate-800 p-4 bg-slate-950">
-                    <div className="text-xs text-slate-400 mb-2 flex items-center gap-2"><Megaphone className="w-3 h-3"/> SYSTEM_BROADCAST</div>
-                    <div className="flex gap-2"><input value={broadcastMsg} onChange={e=>setBroadcastMsg(e.target.value)} className="flex-1 bg-black border border-slate-700 p-2 text-white text-xs outline-none focus:border-cyan-500" placeholder="Message..." /><button onClick={sendBroadcast} className="bg-cyan-900/20 border border-cyan-900 text-cyan-500 text-xs px-4 hover:bg-cyan-900/40 transition-colors">SEND</button></div>
-                </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'DATABASE' && (
-            <div className="grid gap-2">
-                {messages.map(m=><div key={m.id} className="bg-slate-900 p-3 flex justify-between items-center border border-slate-800 hover:border-slate-600 transition-colors"><div><span className="text-cyan-500 text-xs font-bold mr-2">{m.name}</span><span className="text-slate-400 text-sm">{m.message}</span></div><button onClick={()=>handleDelete(m.id)}><Trash2 className="w-4 h-4 text-slate-600 hover:text-red-500 transition-colors"/></button></div>)}
-            </div>
-        )}
-
-        {activeTab === 'AUDIT_LOGS' && (
-            <div className="border border-slate-800 bg-black h-[500px] overflow-y-auto custom-scrollbar font-mono text-[10px]">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-900 text-slate-500 sticky top-0"><tr><th className="p-2">TIME</th><th className="p-2">ACTOR</th><th className="p-2">ACTION</th><th className="p-2">DETAILS</th></tr></thead>
-                    <tbody className="divide-y divide-slate-800">
-                        {auditLogs.map(l => (
-                            <tr key={l.id} className="hover:bg-slate-900/30">
-                                <td className="p-2 text-slate-600">{new Date(l.timestamp).toLocaleTimeString()}</td>
-                                <td className={`p-2 font-bold ${l.actor_type==='ADMIN'?'text-yellow-500':l.actor_type==='ATTACKER'?'text-red-500':'text-green-500'}`}>{l.actor_type}</td>
-                                <td className="p-2 text-white">{l.action}</td>
-                                <td className="p-2 text-slate-500 truncate max-w-[200px]" title={l.details}>{l.details}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        )}
+        {activeTab === 'SECURITY_LOGS' && (<div className="border border-slate-800 bg-slate-950 h-[500px] overflow-y-auto custom-scrollbar"><div className="p-3 bg-red-950/20 text-red-500 text-xs font-bold border-b border-slate-800 flex items-center gap-2 sticky top-0 backdrop-blur-md"><Ban className="w-4 h-4"/> BLACKLISTED_TARGETS ({bannedIps.length})</div>{bannedIps.map(ban => (<div key={ban.ip} className="flex justify-between items-center p-3 border-b border-slate-800/50 hover:bg-slate-900/30"><div className="text-xs"><div className="text-white font-mono text-sm">{ban.ip}</div><div className="text-[10px] text-slate-500">{new Date(ban.banned_at).toLocaleString()}</div><div className="text-[10px] text-red-400">{ban.reason}</div></div><button onClick={() => unbanUser(ban.ip)} className="flex items-center gap-1 text-green-500 border border-green-900 px-3 py-1 text-[10px] hover:bg-green-900 hover:text-white transition-colors"><Unlock className="w-3 h-3" /> UNBAN</button></div>))}</div>)}
+        {activeTab === 'NETWORK_OPS' && (<div className="grid md:grid-cols-2 gap-8"><div className="border border-slate-800 p-6 bg-slate-950"><h3 className="text-sm text-green-500 mb-4 border-b border-green-900/30 pb-2 flex items-center gap-2"><TermIcon className="w-4 h-4"/> REMOTE_EXECUTION</h3><div className="space-y-4"><div className="flex gap-2"><button onClick={() => executeCommand('RELOAD')} className="flex-1 text-[10px] bg-slate-900 px-2 py-2 border border-slate-700 hover:text-white text-slate-300 transition-colors">Force Reload</button><button onClick={() => executeCommand('RICKROLL')} className="flex-1 text-[10px] bg-slate-900 px-2 py-2 border border-slate-700 hover:text-white text-slate-300 transition-colors">Rickroll</button></div><div className="flex items-center bg-black border border-slate-800 p-2"><span className="text-green-500 mr-2">{">"}</span><input value={cmd} onChange={e => setCmd(e.target.value)} onKeyDown={e => e.key === 'Enter' && executeCommand(`ALERT:${cmd}`)} className="bg-transparent border-none outline-none text-white text-xs w-full font-mono" placeholder="Type alert..." /></div></div><div className="mt-8 border-t border-slate-800 pt-6"><h3 className="text-sm text-white mb-4">DEFCON LEVEL</h3><div className="flex gap-1">{[5, 4, 3, 2, 1].map(level => (<button key={level} onClick={() => changeDefcon(level)} className={`flex-1 py-2 text-xs font-bold border transition-colors ${level === 1 ? 'border-red-600 text-red-600 hover:bg-red-950' : 'border-slate-700 text-slate-500 hover:bg-slate-800 hover:text-white'}`}>{level}</button>))}</div></div></div><div className="space-y-6"><div className={`border p-6 text-center transition-colors ${maintenance ? 'border-red-500 bg-red-950/10' : 'border-slate-800 bg-slate-950'}`}><ShieldAlert className={`w-12 h-12 mx-auto mb-4 ${maintenance ? 'text-red-500 animate-pulse' : 'text-slate-600'}`} /><button onClick={toggleMaintenance} className={`px-6 py-3 text-xs font-bold tracking-widest border transition-all ${maintenance ? 'bg-red-600 text-white border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 'text-red-500 border-red-900 hover:bg-red-950'}`}>{maintenance ? "DISENGAGE LOCKDOWN" : "INITIATE LOCKDOWN"}</button></div><div className="border border-slate-800 p-4 bg-slate-950"><div className="text-xs text-slate-400 mb-2 flex items-center gap-2"><Megaphone className="w-3 h-3"/> SYSTEM_BROADCAST</div><div className="flex gap-2"><input value={broadcastMsg} onChange={e=>setBroadcastMsg(e.target.value)} className="flex-1 bg-black border border-slate-700 p-2 text-white text-xs outline-none focus:border-cyan-500" placeholder="Message..." /><button onClick={sendBroadcast} className="bg-cyan-900/20 border border-cyan-900 text-cyan-500 text-xs px-4 hover:bg-cyan-900/40 transition-colors">SEND</button></div></div></div></div>)}
+        {activeTab === 'DATABASE' && (<div className="grid gap-2">{messages.map(m=><div key={m.id} className="bg-slate-900 p-3 flex justify-between items-center border border-slate-800 hover:border-slate-600 transition-colors"><div><span className="text-cyan-500 text-xs font-bold mr-2">{m.name}</span><span className="text-slate-400 text-sm">{m.message}</span></div><button onClick={()=>handleDelete(m.id)}><Trash2 className="w-4 h-4 text-slate-600 hover:text-red-500 transition-colors"/></button></div>)}</div>)}
+        {activeTab === 'AUDIT_LOGS' && (<div className="border border-slate-800 bg-black h-[500px] overflow-y-auto custom-scrollbar font-mono text-[10px]"><table className="w-full text-left"><thead className="bg-slate-900 text-slate-500 sticky top-0"><tr><th className="p-2">TIME</th><th className="p-2">ACTOR</th><th className="p-2">ACTION</th><th className="p-2">DETAILS</th></tr></thead><tbody className="divide-y divide-slate-800">{auditLogs.map(l => (<tr key={l.id} className="hover:bg-slate-900/30"><td className="p-2 text-slate-600">{new Date(l.timestamp).toLocaleTimeString()}</td><td className={`p-2 font-bold ${l.actor_type==='ADMIN'?'text-yellow-500':l.actor_type==='ATTACKER'?'text-red-500':'text-green-500'}`}>{l.actor_type}</td><td className="p-2 text-white">{l.action}</td><td className="p-2 text-slate-500 truncate max-w-[200px]" title={l.details}>{l.details}</td></tr>))}</tbody></table></div>)}
       </div>
     </div>
   );
