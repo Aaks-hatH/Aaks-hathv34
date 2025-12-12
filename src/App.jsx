@@ -8,18 +8,18 @@ import ProjectDetail from '@/pages/ProjectDetail';
 import ToolsDashboard from '@/pages/ToolsDashboard';
 import Admin from '@/pages/Admin';
 import HUD from '@/pages/HUD';
-import FakeLogin from '@/pages/FakeLogin'; // Added missing import
+import FakeLogin from '@/pages/FakeLogin';
 
 // Components
 import KonamiCode from '@/components/portfolio/KonamiCode';
 import GlobalTracker from '@/components/GlobalTracker';
 import LandingGate from '@/components/LandingGate';
-import AntiTamper from '@/components/AntiTamper'; // <--- NEW IMPORT
+import AntiTamper from '@/components/AntiTamper';
+import CyberDock from '@/components/CyberDock'; // <--- NEW IMPORT
 
 const queryClient = new QueryClient();
 
 function App() {
-  // Check if they already verified in this session
   const [verified, setVerified] = useState(false);
 
   useEffect(() => {
@@ -32,19 +32,18 @@ function App() {
     setVerified(true);
   };
 
-  // 1. SHOW GATE IF NOT VERIFIED
   if (!verified) {
     return <LandingGate onVerify={handleVerify} />;
   }
 
-  // 2. SHOW SITE IF VERIFIED
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        {/* GLOBAL SECURITY LAYERS */}
+        {/* GLOBAL LAYERS */}
         <GlobalTracker />
-        <AntiTamper /> {/* <--- PROTECTS ALL PAGES */}
+        <AntiTamper />
         <KonamiCode />
+        <CyberDock /> {/* <--- NEW: Floating Nav Bar */}
         
         <Routes>
           <Route path="/" element={<Home />} />
