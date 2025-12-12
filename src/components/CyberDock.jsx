@@ -1,14 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Home, Terminal, Shield, Lock, LayoutGrid } from 'lucide-react';
+import { Home, Terminal, LayoutGrid, Globe, ExternalLink } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const items = [
   { icon: Home, label: 'Home', path: '/' },
   { icon: LayoutGrid, label: 'Projects', path: '/#projects' }, 
-  { icon: Terminal, label: 'Tools', path: '/tools' },
-  { icon: Shield, label: 'Admin', path: '/admin' },
-  { icon: Lock, label: 'HUD', path: '/hud' },
+  { icon: Terminal, label: 'Tools', path: '/tools?tab=live' }, // Deep link to tools
+  { icon: Globe, label: 'Field Kit', path: '/tools?tab=external' }, // New External Tools Link
 ];
 
 export default function CyberDock() {
@@ -23,10 +22,9 @@ export default function CyberDock() {
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
         {items.map((item) => {
-          // Check active state (handle root path vs subpaths)
-          const isActive = item.path === '/' 
-            ? location.pathname === '/' 
-            : location.pathname.startsWith(item.path);
+          // Check active state
+          const isActive = location.pathname === item.path.split('?')[0] && 
+                           (item.path.includes('?') ? location.search.includes(item.path.split('?')[1]) : true);
 
           return (
             <Link key={item.label} to={item.path}>
