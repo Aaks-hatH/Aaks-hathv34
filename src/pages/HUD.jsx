@@ -42,12 +42,21 @@ export default function HUD() {
     } catch (err) { setError("CONNECTION ERROR"); } finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    if (!auth) return;
-    
-    let wakeLock = null;
-    const requestWakeLock = async () => { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {} };
-    requestWakeLock();
+ // 2. LISTEN TO LOGS (Updated to use 'live_feed')
+    const logSub = supabase.channel('hud-logs')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_feed' }, (p) => {
+        const newLog = p.new;
+        setLogs(prev => [newLog, ...prev].slice(0, 20));
+        
+        if (newLog.actor_type === 'ATTACKER' || newLog.action.includes('BAN')) {
+            setThreatLevel('CRITICAL');
+            playSound('ALARM');
+            setTimeout(() => setThreatLevel('NORMAL'), 5000);
+        } else {
+            playSound('BLEEP');
+        }
+      })
+      .subscribe();
 
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
