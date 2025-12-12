@@ -13,18 +13,51 @@ export async function onRequestGet(context) {
   // 1. BAN THE IP
   await supabase.from('banned_ips').insert({ 
       ip: clientIP, 
-      reason: "TRIPWIRE: Accessed Honey Link" 
+      reason: "TRIPWIRE: Accessed Hidden System Recovery Endpoint" 
   });
 
-  // 2. ALERT
+  // 2. ALERT DISCORD
   if (webhookUrl) {
       const msg = `<@${ADMIN_ID}>\n**🕸️ TRIPWIRE TRIGGERED**\n**Source:** ${clientIP} (${country})\n**Action:** User/Bot clicked the invisible honey link.\n**Status:** BANNED`;
-      await fetch(webhookUrl, {
+      context.waitUntil(fetch(webhookUrl, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: msg })
-      });
+      }));
   }
 
-  // 3. Return a fake 404 so they don't know they triggered a trap
-  return new Response("Not Found", { status: 404 });
+  // 3. THEATRICAL RESPONSE (The "Gotcha" Screen)
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>SYSTEM CRITICAL</title>
+        <style>
+            body { background-color: #000; color: #ef4444; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+            .container { border: 1px solid #ef4444; padding: 40px; box-shadow: 0 0 50px rgba(239, 68, 68, 0.3); max-width: 600px; }
+            h1 { font-size: 48px; margin: 0 0 20px 0; letter-spacing: 5px; text-shadow: 2px 2px #500; }
+            p { font-size: 18px; color: #fff; }
+            .ip { color: #22c55e; font-weight: bold; font-size: 24px; margin: 20px 0; display: block; }
+            .blink { animation: blink 1s infinite; }
+            @keyframes blink { 50% { opacity: 0; } }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1> ACCESS DENIED</h1>
+            <p>UNAUTHORIZED SYSTEM RECOVERY ATTEMPT DETECTED.</p>
+            <p>Your digital footprint has been captured.</p>
+            <p>Why'd you try hacking a cybersecurity agent?</p>
+            <span class="ip">TARGET IP: ${clientIP}</span>
+            <p class="blink" style="color: #ef4444; margin-top: 30px;">[ COUNTER-MEASURES DEPLOYED ]</p>
+            <p style="font-size: 12px; color: #666; margin-top: 40px;">Incident ID: TRP-${Date.now()}</p>
+        </div>
+    </body>
+    </html>
+  `;
+
+  return new Response(html, {
+    headers: { "Content-Type": "text/html" },
+    status: 403
+  });
 }
