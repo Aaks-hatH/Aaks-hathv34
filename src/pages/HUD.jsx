@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/api/base44Client';
-import { Activity, Wifi, Terminal, Eye, EyeOff, Lock, ShieldAlert, Zap, Cpu, Network } from 'lucide-react';
+import { Activity, Wifi, Terminal, Eye, EyeOff, Lock, ShieldAlert, Zap, Cpu, Globe, Shield } from 'lucide-react';
 
-// --- SYNTHETIC AUDIO ---
+// --- AUDIO SYNTHESIS ---
 const playSound = (type) => {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if (!AudioContext) return;
@@ -44,136 +44,90 @@ export default function HUD() {
   const [logs, setLogs] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   
+  // DEVICE TELEMETRY STATE
+  const [deviceData, setDeviceData] = useState({ 
+      online: false, 
+      url: 'WAITING FOR SIGNAL...', 
+      threat: 0, 
+      lastSeen: null 
+  });
+  
   // Security State
   const [threatLevel, setThreatLevel] = useState('NORMAL'); 
-  const [panicMode, setPanicMode] = useState(false); 
   const [privacyMode, setPrivacyMode] = useState(false);
-  const [terminated, setTerminated] = useState(false);
-  
-  // Diagnostics (Login Screen)
-  const [myIP, setMyIP] = useState('SCANNING...');
-  const [deviceStatus, setDeviceStatus] = useState('CHECKING...');
-  const [ipStatus, setIpStatus] = useState('CHECKING...');
 
-  const lastEscPress = useRef(0);
-
-  // ---------------------------------------------------------
-  // 1. INITIAL SECURITY SCAN (Runs on Load)
-  // ---------------------------------------------------------
-  useEffect(() => {
-    const runDiagnostics = async () => {
-        // A. DEVICE CHECK
-                // A. DEVICE CHECK
-        const ua = navigator.userAgent;
-        const isLinuxOrChromebook = ua.includes("CrOS") || ua.includes("Linux");
-        
-        if (isLinuxOrChromebook) {
-            setDeviceStatus("VERIFIED_HARDWARE");
-        } else {
-            setDeviceStatus("UNAUTHORIZED_DEVICE");
-            // Auto-redirect intruders
-            setTimeout(() => window.location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ", 2000);
-        }
-
-        // B. IP CHECK
-        try {
-            // Get IP
-            const geo = await fetch('/api/geo_resolve').then(r => r.json());
-            setMyIP(geo.ip);
-
-            // Check Whitelist
-            const access = await fetch('/api/client_verify');
-            if (access.ok) {
-                setIpStatus("WHITELISTED");
-            } else {
-                setIpStatus("UNREGISTERED_IP");
-            }
-        } catch(e) {
-            setIpStatus("NETWORK_ERROR");
-        }
-    };
-    runDiagnostics();
-  }, []);
-
-  // ---------------------------------------------------------
-  // 2. KEYBOARD LISTENERS
-  // ---------------------------------------------------------
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-        if (e.key === 'Escape') {
-            const now = Date.now();
-            if (now - lastEscPress.current < 300) setTerminated(true);
-            else setPanicMode(prev => !prev);
-            lastEscPress.current = now;
-        }
-        if (e.key === 'p' || e.key === 'P') setPrivacyMode(prev => !prev);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // ---------------------------------------------------------
-  // 3. LOGIN LOGIC
-  // ---------------------------------------------------------
+  // 1. LOGIN HANDLER
   const handleLogin = async (e) => {
     e.preventDefault();
-    // Block login if IP or Device is wrong (Double check)
-    if (ipStatus !== "WHITELISTED" && ipStatus !== "NETWORK_ERROR") { // Allow net error to try anyway
-        setError("SECURITY LOCK: INVALID IP");
-        return;
-    }
-
     setLoading(true);
     setError('');
+    
     try {
+        // Send initial heartbeat to prove identity
         const res = await fetch('/api/stream_keepalive', {
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password, task, status: true })
         });
-        if (res.ok) { setAuth(true); playSound('BLEEP'); } 
-        else { setError("ACCESS DENIED: WRONG PASSWORD"); setPassword(''); }
+        
+        if (res.ok) { 
+            setAuth(true); 
+            playSound('BLEEP'); 
+        } else { 
+            setError("ACCESS DENIED"); 
+            setPassword(''); 
+        }
     } catch (err) { setError("CONNECTION ERROR"); } 
     finally { setLoading(false); }
   };
 
-  // ---------------------------------------------------------
-  // 4. ACTIVE SESSION LOGIC
-  // ---------------------------------------------------------
+  // 2. MAIN LOOP (Only runs if Auth)
   useEffect(() => {
     if (!auth) return;
     
-    // Wake Lock
+    // Wake Lock (Prevent screen sleeping)
     let wakeLock = null;
     const requestWakeLock = async () => {
       try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
     };
     requestWakeLock();
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') requestWakeLock(); });
-    
-    // Timer
+
+    // Clock
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
-    // Heartbeat
+    // Heartbeat (Dead Man's Switch) - Keep Alive every 30s
     const sendHeartbeat = () => {
       fetch('/api/stream_keepalive', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password, task, status: true })
-      });
+      }).catch(() => console.log("Heartbeat failed"));
     };
-    sendHeartbeat();
+    sendHeartbeat(); // Immediate pulse
     const hbInt = setInterval(sendHeartbeat, 30000);
 
-    // Realtime Data
+    // PAGE VISIBILITY WARNING (Mobile Hardening)
+    const handleVisibilityChange = () => {
+      if (document.hidden) document.title = "⚠️ CONNECTION PAUSED";
+      else {
+        document.title = "HUD ONLINE";
+        sendHeartbeat(); // Pulse immediately on return
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // SUPABASE REALTIME SUBSCRIPTIONS
+    // A. Visitors
     const presence = supabase.channel('online-users')
       .on('presence', { event: 'sync' }, () => setVisitors(Object.keys(presence.presenceState()).length))
       .subscribe();
 
+    // B. Logs
     const logSub = supabase.channel('hud-logs')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, (p) => {
         const newLog = p.new;
         setLogs(prev => [newLog, ...prev].slice(0, 20));
-        if (newLog.actor_type === 'ATTACKER' || newLog.action.includes('HONEYPOT') || newLog.action.includes('BAN')) {
+        
+        if (newLog.actor_type === 'ATTACKER' || newLog.action.includes('BAN')) {
             setThreatLevel('CRITICAL');
             playSound('ALARM');
             setTimeout(() => setThreatLevel('NORMAL'), 5000);
@@ -183,121 +137,139 @@ export default function HUD() {
       })
       .subscribe();
 
+    // C. Hardware Uplink (Extension)
+    const deviceSub = supabase.channel('device-uplink')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'device_telemetry' }, (p) => {
+          if (p.new) {
+              setDeviceData({
+                  online: true,
+                  url: p.new.current_url,
+                  threat: p.new.threat_score,
+                  lastSeen: new Date()
+              });
+          }
+      })
+      .subscribe();
+
+    // Watchdog: Check if extension went offline (No signal for > 15s)
+    const deviceCheck = setInterval(() => {
+        if (deviceData.lastSeen && (new Date() - deviceData.lastSeen > 15000)) {
+            setDeviceData(prev => ({ ...prev, online: false }));
+        }
+    }, 5000);
+
     return () => { 
-        clearInterval(timer); clearInterval(hbInt); 
-        supabase.removeChannel(presence); supabase.removeChannel(logSub); 
+        clearInterval(timer); clearInterval(hbInt); clearInterval(deviceCheck);
+        supabase.removeChannel(presence); supabase.removeChannel(logSub); supabase.removeChannel(deviceSub);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [auth, task]);
+  }, [auth, task, deviceData.lastSeen]);
 
-  // ---------------------------------------------------------
-  // UI: PANIC / KILL SWITCH
-  // ---------------------------------------------------------
-  if (terminated) return <div className="fixed inset-0 bg-black z-[99999] cursor-none flex flex-col items-start p-4 font-mono text-xs text-gray-600 select-none"><p>KERNEL_PANIC: FORCE_SHUTDOWN</p><p>dumping physical memory...</p><p>system halted.</p></div>;
-  
-  if (panicMode) return <div className="min-h-screen bg-white text-black font-sans flex flex-col items-center justify-center p-4"><h1 className="text-4xl font-bold mb-4">404 Not Found</h1><p>The requested URL /hud was not found on this server.</p><hr className="w-full max-w-lg my-6 border-gray-300"/><p className="text-sm text-gray-500">nginx/1.18.0 (Ubuntu)</p></div>;
-
-  // ---------------------------------------------------------
-  // UI: LOGIN SCREEN (With Diagnostics)
-  // ---------------------------------------------------------
+  // LOGIN SCREEN
   if (!auth) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 font-mono">
-        <div className="w-full max-w-md space-y-6">
-            {/* DIAGNOSTICS PANEL */}
-            <div className="border border-green-900/30 bg-green-950/10 p-4 rounded text-xs space-y-2">
-                <div className="flex justify-between items-center text-green-700 font-bold border-b border-green-900/30 pb-1 mb-2">
-                    <span className="flex items-center gap-2"><Cpu className="w-3 h-3"/> SYSTEM DIAGNOSTICS</span>
-                    <span>v4.0.1</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                    <span>DEVICE_INTEGRITY:</span>
-                    <span className={deviceStatus === "VERIFIED_HARDWARE" ? "text-green-500" : "text-red-500"}>{deviceStatus}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                    <span>NETWORK_ORIGIN:</span>
-                    <span className="text-slate-300 font-mono">{myIP}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                    <span>IP_CLEARANCE:</span>
-                    <span className={ipStatus === "WHITELISTED" ? "text-green-500" : "text-red-500"}>{ipStatus}</span>
-                </div>
-            </div>
-
-            {/* LOGIN BOX */}
-            <div className="border border-cyan-900/50 p-8 bg-slate-950 text-center shadow-[0_0_30px_rgba(8,145,178,0.2)]">
-                <Lock className="w-12 h-12 text-cyan-500 mx-auto mb-4" />
-                <h1 className="text-cyan-500 tracking-[0.5em] text-xl mb-8">HUD_LOGIN</h1>
-                <form onSubmit={handleLogin}>
-                    <input 
-                        type="password" 
-                        value={password} 
-                        onChange={e=>setPassword(e.target.value)} 
-                        className="w-full bg-black border border-slate-800 p-3 text-cyan-400 text-center outline-none focus:border-cyan-500 placeholder-slate-800" 
-                        autoFocus 
-                        placeholder="ENTER PASSCODE"
-                    />
-                    {error && <div className="text-red-500 text-xs mt-4 font-bold animate-pulse">{error}</div>}
-                    <button 
-                        type="submit" 
-                        disabled={loading || ipStatus === "UNREGISTERED_IP"} // Hard Lockout
-                        className={`w-full mt-6 py-2 border transition-colors font-bold tracking-widest ${ipStatus === "UNREGISTERED_IP" ? "bg-red-900/20 text-red-500 border-red-900 cursor-not-allowed" : "bg-cyan-900/20 text-cyan-400 border-cyan-900 hover:bg-cyan-900/40"}`}
-                    >
-                        {loading ? "VERIFYING..." : ipStatus === "UNREGISTERED_IP" ? "LOCKED: INVALID IP" : "INITIALIZE SYSTEM"}
-                    </button>
-                </form>
-            </div>
+        <div className="w-full max-w-md border border-cyan-900/50 p-8 bg-slate-950 text-center shadow-[0_0_30px_rgba(8,145,178,0.2)]">
+            <Lock className="w-12 h-12 text-cyan-500 mx-auto mb-4" />
+            <h1 className="text-cyan-500 tracking-[0.5em] text-xl mb-8">HUD_LOGIN</h1>
+            <form onSubmit={handleLogin}>
+                <input 
+                    type="password" 
+                    value={password} 
+                    onChange={e=>setPassword(e.target.value)} 
+                    className="w-full bg-black border border-slate-800 p-3 text-cyan-400 text-center outline-none focus:border-cyan-500 placeholder-slate-800" 
+                    autoFocus 
+                    placeholder="ENTER PASSCODE"
+                />
+                {error && <div className="text-red-500 text-xs mt-4 font-bold animate-pulse">{error}</div>}
+                <button type="submit" disabled={loading} className="w-full mt-6 py-2 border border-cyan-900 bg-cyan-900/20 text-cyan-400 hover:bg-cyan-900/40 transition-colors font-bold tracking-widest">
+                    {loading ? "VERIFYING..." : "INITIALIZE SYSTEM"}
+                </button>
+            </form>
         </div>
       </div>
     );
   }
 
-  // ---------------------------------------------------------
-  // UI: DASHBOARD (Standard)
-  // ---------------------------------------------------------
   const blurClass = privacyMode ? "blur-md opacity-50 transition-all duration-300" : "transition-all duration-300";
 
   return (
     <div className={`min-h-screen font-mono p-6 overflow-hidden flex flex-col transition-colors duration-300 ${threatLevel === 'CRITICAL' ? 'bg-red-950' : 'bg-black text-green-500'}`}>
       
+      {/* HEADER */}
       <div className={`flex justify-between items-end border-b pb-4 mb-6 ${threatLevel === 'CRITICAL' ? 'border-red-500' : 'border-green-900/50'}`}>
         <div>
             <h1 className={`text-4xl font-bold tracking-tighter ${threatLevel === 'CRITICAL' ? 'text-red-500 animate-pulse' : 'text-white'}`}>
                 {threatLevel === 'CRITICAL' ? '⚠️ SECURITY ALERT ⚠️' : 'COMMAND_STATION'}
             </h1>
-            <div className="flex items-center gap-2 text-xs mt-1">
-                <Wifi className="w-3 h-3 animate-pulse" />
-                <span>UPLINK_ESTABLISHED</span>
-                <span className="ml-4 opacity-50">WAKE_LOCK: ACTIVE</span>
-                <span className="ml-4 text-slate-500 flex items-center gap-1">
+            <div className="flex items-center gap-4 text-xs mt-1">
+                <span className="flex items-center gap-2"><Wifi className="w-3 h-3 animate-pulse" /> UPLINK_ESTABLISHED</span>
+                <span className="opacity-50">WAKE_LOCK: ACTIVE</span>
+                <button onClick={() => setPrivacyMode(!privacyMode)} className="flex items-center gap-1 hover:text-white">
                     {privacyMode ? <EyeOff className="w-3 h-3"/> : <Eye className="w-3 h-3"/>}
                     {privacyMode ? "PRIVACY: ON" : "PRIVACY: OFF"}
-                </span>
+                </button>
             </div>
         </div>
         <div className="text-right">
             <div className="text-5xl font-bold text-white">{currentTime.toLocaleTimeString([], {hour12: false})}</div>
-            <div className="text-sm opacity-70">{currentTime.toLocaleDateString()}</div>
+            {/* DEVICE STATUS PILL */}
+            <div className={`mt-2 inline-flex items-center gap-2 border px-3 py-1 rounded-full text-xs font-bold ${deviceData.online ? 'border-cyan-500 text-cyan-400 bg-cyan-950/30' : 'border-red-900 text-red-500 bg-red-950/20'}`}>
+                <Cpu className="w-3 h-3" /> 
+                {deviceData.online ? "ADMIN_PC_CONNECTED" : "ADMIN_PC_OFFLINE"}
+            </div>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-6 flex-1">
+        
+        {/* LEFT COLUMN */}
         <div className="col-span-1 space-y-6">
+            
+            {/* 1. NEURAL UPLINK PANEL (EXTENSION DATA) */}
+            <div className="border border-cyan-900 bg-cyan-950/10 p-4 rounded relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-2"><Activity className="w-4 h-4 text-cyan-500 animate-pulse"/></div>
+                <h3 className="text-xs text-cyan-500 mb-4 font-bold flex items-center gap-2"><Globe className="w-3 h-3"/> NEURAL UPLINK</h3>
+                
+                <div className={`space-y-4 text-sm ${blurClass}`}>
+                    <div>
+                        <div className="text-[10px] text-slate-500 mb-1">CURRENT TARGET URL</div>
+                        <div className="truncate text-white font-bold font-mono bg-black/50 p-2 rounded border border-cyan-900/30" title={deviceData.url}>
+                            {deviceData.online ? deviceData.url : "NO SIGNAL"}
+                        </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-end">
+                        <div>
+                            <div className="text-[10px] text-slate-500">THREAT ANALYSIS</div>
+                            <div className={`text-2xl font-bold ${deviceData.threat > 50 ? "text-red-500 animate-pulse" : "text-green-400"}`}>
+                                {deviceData.online ? `${deviceData.threat}/100` : "--"}
+                            </div>
+                        </div>
+                        {deviceData.threat > 50 && <ShieldAlert className="w-8 h-8 text-red-500" />}
+                        {deviceData.threat <= 50 && <Shield className="w-8 h-8 text-green-500" />}
+                    </div>
+                </div>
+            </div>
+
+            {/* 2. VISITORS PANEL */}
+            <div className={`border p-4 ${threatLevel === 'CRITICAL' ? 'border-red-500 bg-red-900/20' : 'border-green-900 bg-green-950/5'}`}>
+                <h3 className="text-xs mb-2 flex items-center gap-2 opacity-70"><Eye className="w-4 h-4"/> ACTIVE_VISITORS</h3>
+                <div className={`text-6xl font-bold text-white ${blurClass}`}>{visitors}</div>
+            </div>
+
+            {/* 3. TASK INPUT */}
             <div className={`border p-4 ${threatLevel === 'CRITICAL' ? 'border-red-500 bg-red-900/20' : 'border-green-900 bg-green-950/5'}`}>
                 <h3 className="text-xs mb-2 flex items-center gap-2 opacity-70"><Activity className="w-4 h-4"/> CURRENT_OBJECTIVE</h3>
                 <textarea 
                     value={task} 
                     onChange={e => setTask(e.target.value)}
-                    className={`w-full bg-black border border-slate-800 p-3 text-xl text-white outline-none focus:border-green-500 h-32 resize-none ${blurClass}`}
+                    className={`w-full bg-black border border-slate-800 p-3 text-xl text-white outline-none focus:border-green-500 h-24 resize-none ${blurClass}`}
                 />
-                <div className="mt-2 text-[10px] opacity-50 text-right">UPDATES PUBLIC SITE INSTANTLY</div>
-            </div>
-
-            <div className={`border p-4 ${threatLevel === 'CRITICAL' ? 'border-red-500 bg-red-900/20' : 'border-green-900 bg-green-950/5'}`}>
-                <h3 className="text-xs mb-2 flex items-center gap-2 opacity-70"><Eye className="w-4 h-4"/> ACTIVE_VISITORS</h3>
-                <div className={`text-6xl font-bold text-white ${blurClass}`}>{visitors}</div>
             </div>
         </div>
 
+        {/* RIGHT COLUMN (LOGS) */}
         <div className={`col-span-2 border p-4 bg-black relative overflow-hidden flex flex-col ${threatLevel === 'CRITICAL' ? 'border-red-500' : 'border-green-900'}`}>
             <h3 className="text-xs mb-4 flex items-center gap-2 opacity-70"><Terminal className="w-4 h-4"/> DATA_INTERCEPT</h3>
             
