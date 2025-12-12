@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// Pages
 import Home from '@/pages/Home';
 import ProjectDetail from '@/pages/ProjectDetail';
 import ToolsDashboard from '@/pages/ToolsDashboard';
 import Admin from '@/pages/Admin';
 import HUD from '@/pages/HUD';
+import FakeLogin from '@/pages/FakeLogin'; // Added missing import
+
+// Components
 import KonamiCode from '@/components/portfolio/KonamiCode';
 import GlobalTracker from '@/components/GlobalTracker';
-import LandingGate from '@/components/LandingGate'; // <--- IMPORT
+import LandingGate from '@/components/LandingGate';
+import AntiTamper from '@/components/AntiTamper'; // <--- NEW IMPORT
 
 const queryClient = new QueryClient();
 
@@ -35,8 +41,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        {/* GLOBAL SECURITY LAYERS */}
         <GlobalTracker />
+        <AntiTamper /> {/* <--- PROTECTS ALL PAGES */}
         <KonamiCode />
+        
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/Home" element={<Home />} />
