@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EXIF from 'exif-js';
 
 // ==========================================
-// 1. ULTIMATE BRUTE FORCE ENGINE (Patched v2)
+// 1. ULTIMATE BRUTE FORCE ENGINE (Fixed Symbols)
 // ==========================================
 function BruteForceSim() {
   const [target, setTarget] = useState('');
@@ -26,8 +26,8 @@ function BruteForceSim() {
   const [config, setConfig] = useState({
     useCommon: true,
     useYears: false,
-    useNumbers: false, // 0-999
-    useSymbols: false, // !@#$
+    useNumbers: false,
+    useSymbols: false,
     useLeet: false,
     useMutations: false 
   });
@@ -39,15 +39,15 @@ function BruteForceSim() {
     let baseList = [...userKeywords];
     
     if (config.useCommon) {
-        const common = ["password", "admin", "123456", "secret", "iloveyou", "welcome", "computer"];
+        const common = ["password", "admin", "123456", "secret", "iloveyou", "welcome"];
         baseList = [...baseList, ...common];
     }
 
-    const symbols = ["!", "@", "#", "$", "%", "&", "*", "?", "-", "_", "."];
+    // *** THE FIX: Expanded Symbol List ***
+    const symbols = ["!", "@", "#", "$", "%", "&", "*", "?", "-", "_", ".", "(", ")", "(--"];
     const leetMap = { 'a': '@', 'e': '3', 'i': '1', 'o': '0', 's': '$', 't': '7' };
 
     for (let word of baseList) {
-        // Create Case Variations: "admin" -> "admin", "ADMIN", "Admin"
         const variations = [word, word.toLowerCase(), word.toUpperCase(), word.charAt(0).toUpperCase() + word.slice(1)];
         
         if (config.useLeet) {
@@ -57,57 +57,59 @@ function BruteForceSim() {
         for (let v of variations) {
             yield v; 
 
-            // 1. SYMBOLS ONLY (e.g. "Aanya@")
+            // 1. SYMBOLS ONLY
             if (config.useSymbols) {
                 for (let s of symbols) yield v + s;
             }
             
-            // 2. NUMBERS ONLY (e.g. "Aanya25")
-            // Also handles Number + Symbol (e.g. "Aanya25@")
+            // 2. NUMBERS (+ SYMBOLS)
             if (config.useNumbers) {
                 for (let i = 0; i < 1000; i++) {
-                    yield v + i;
+                    let numVar = v + i;
+                    yield numVar; 
                     if (config.useSymbols) {
-                        for (let s of symbols) yield v + i + s;
+                        for (let s of symbols) yield numVar + s;
                     }
                 }
             }
 
-            // 3. *** NEW FIX: SYMBOL + NUMBER (e.g. "Aanya@25") ***
+            // 3. SYMBOL + NUMBER (e.g. "Word@123")
             if (config.useSymbols && config.useNumbers) {
                 for (let s of symbols) {
-                    for (let i = 0; i < 1000; i++) {
+                    for (let i = 0; i < 100; i++) { // Limit to 100 to keep speed high
                          yield v + s + i; 
                     }
                 }
             }
 
-            // 4. YEARS (e.g. "Aanya2025")
+            // 4. YEARS
             if (config.useYears) {
                 for (let y = 1900; y <= 2030; y++) {
-                    yield v + y; 
+                    let yearVar = v + y;
+                    yield yearVar;
                     if (config.useSymbols) {
-                        yield v + y + s; // "Aanya2025@"
-                        yield v + s + y; // "Aanya@2025" (Another common pattern)
+                        for (let s of symbols) yield yearVar + s;
+                        for (let s of symbols) yield v + s + y;
                     }
                 }
             }
 
             // 5. MUTATION MODE (Injecting inside words)
+            // Logic: "h@ck3r" + "(--" -> "h@ck(--3r"
             if (config.useMutations) {
                 for (let i = 1; i < v.length; i++) {
                     const start = v.slice(0, i);
                     const end = v.slice(i);
                     for (let s of symbols) {
-                        yield start + s + end;         
-                        yield start + s + s + end;     
+                        yield start + s + end;
+                        yield start + s + s + end;
                     }
                 }
             }
         }
     }
     
-    // Fallback Randoms
+    // Fallback
     for(let i=0; i<50000; i++) yield Math.random().toString(36).substring(7);
   }
 
@@ -128,7 +130,6 @@ function BruteForceSim() {
         let currentGuess = '';
         let found = false;
 
-        // Run for 12ms per frame
         while (performance.now() - frameStart < 12) {
             const next = iterator.next();
             if (next.done) { setStatus('FAILED'); return; }
@@ -159,7 +160,7 @@ function BruteForceSim() {
       </div>
 
       <div className="grid grid-cols-2 gap-2 p-2 bg-slate-900/50 rounded border border-slate-800">
-        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer"><input type="checkbox" checked={config.useNumbers} onChange={e => setConfig({...config, useNumbers: e.target.checked})} /><span>Deep Numbers (0-999)</span></label>
+        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer"><input type="checkbox" checked={config.useNumbers} onChange={e => setConfig({...config, useNumbers: e.target.checked})} /><span>Numbers (0-999)</span></label>
         <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer"><input type="checkbox" checked={config.useYears} onChange={e => setConfig({...config, useYears: e.target.checked})} /><span>Years (1900-2030)</span></label>
         <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer"><input type="checkbox" checked={config.useSymbols} onChange={e => setConfig({...config, useSymbols: e.target.checked})} /><span>Symbols (!@#)</span></label>
         <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer"><input type="checkbox" checked={config.useLeet} onChange={e => setConfig({...config, useLeet: e.target.checked})} /><span>Leet Speak</span></label>
@@ -174,7 +175,7 @@ function BruteForceSim() {
             <div className="text-slate-500">{status}</div>
         </div>
         <div className="text-center py-4 relative"><div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">CURRENT GUESS</div><div className={`text-2xl font-bold font-mono tracking-wider truncate ${status === 'CRACKED' ? 'text-green-400 scale-110' : 'text-slate-200 blur-[1px]'}`}>{status === 'IDLE' ? 'WAITING...' : stats.current}</div></div>
-        <div className="flex justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-800"><span>TRIED: <span className="text-white">{stats.attempts.toLocaleString()}</span></span><span>STRATEGY: <span className="text-cyan-500">HYBRID_MASK_V2</span></span></div>
+        <div className="flex justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-800"><span>TRIED: <span className="text-white">{stats.attempts.toLocaleString()}</span></span><span>STRATEGY: <span className="text-cyan-500">HYBRID_MASK_V3</span></span></div>
       </div>
       {status === 'CRACKED' && (<div className="p-3 bg-green-900/20 border border-green-500/50 text-green-400 text-center text-xs animate-in zoom-in shadow-[0_0_20px_rgba(34,197,94,0.2)]">🔓 MATCH FOUND: <span className="font-bold bg-green-950 px-2 py-1 rounded border border-green-500/30">{target}</span></div>)}
       {status === 'FAILED' && (<div className="p-3 bg-red-900/20 border border-red-500/50 text-red-400 text-center text-xs">❌ EXHAUSTED WORDLIST.</div>)}
