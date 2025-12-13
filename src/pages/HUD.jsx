@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/api/base44Client';
 import { Activity, Wifi, Terminal, Eye, EyeOff, Lock, ShieldAlert, Cpu, Globe, Shield, AlertTriangle } from 'lucide-react';
 
-// --- UPGRADED AUDIO ENGINE ---
 const playSound = (type) => {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if (!AudioContext) return;
@@ -13,31 +12,10 @@ const playSound = (type) => {
   gain.connect(ctx.destination);
 
   if (type === 'BLEEP') {
-    // 📡 DATA CHIRP (High Tech)
-    // Louder (0.1) and higher pitch for clarity
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(2000, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(3000, ctx.currentTime + 0.1);
-    
-    gain.gain.setValueAtTime(0.1, ctx.currentTime); // Louder
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-    
-    osc.start();
-    osc.stop(ctx.currentTime + 0.1);
+    osc.type = 'sine'; osc.frequency.setValueAtTime(2000, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(3000, ctx.currentTime + 0.1); gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1); osc.start(); osc.stop(ctx.currentTime + 0.1);
   } 
-  
   if (type === 'ALARM') {
-    // 🚨 KLAXON (Threat Detected)
-    // Much Louder (0.4) and "Dive Horn" effect
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.6); // Pitch Drop
-    
-    gain.gain.setValueAtTime(0.4, ctx.currentTime); // VERY LOUD
-    gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-    
-    osc.start();
-    osc.stop(ctx.currentTime + 0.6);
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(800, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.6); gain.gain.setValueAtTime(0.4, ctx.currentTime); gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.6); osc.start(); osc.stop(ctx.currentTime + 0.6);
   }
 };
 
@@ -52,11 +30,14 @@ export default function HUD() {
   const [logs, setLogs] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   
-  const [deviceData, setDeviceData] = useState({ online: false, url: 'WAITING FOR SIGNAL...', threat: 0, lastSeen: null });
+  // DEVICE STATE
+  const [deviceData, setDeviceData] = useState({ online: false, url: 'WAITING FOR SIGNAL...', threat: 0 });
   const [threatLevel, setThreatLevel] = useState('NORMAL'); 
   const [privacyMode, setPrivacyMode] = useState(false);
 
-  // LOGIN
+  // REFS (The Fix for Stale State)
+  const lastHeartbeatRef = useRef(0); // Tracks time since last pulse
+
   const handleLogin = async (e) => {
     e.preventDefault(); setLoading(true); setError('');
     try {
@@ -65,64 +46,70 @@ export default function HUD() {
     } catch (err) { setError("CONNECTION ERROR"); } finally { setLoading(false); }
   };
 
-  // MAIN LOOP
   useEffect(() => {
     if (!auth) return;
     
-    // Wake Lock
+    // 1. BASICS
     let wakeLock = null;
     const requestWakeLock = async () => { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {} };
     requestWakeLock();
 
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
-    // Heartbeat
-    const sendHeartbeat = () => { fetch('/api/stream_keepalive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, task, status: true }) }).catch(() => console.log("Heartbeat failed")); };
+    const sendHeartbeat = () => { fetch('/api/stream_keepalive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, task, status: true }) }).catch(() => {}); };
     sendHeartbeat();
     const hbInt = setInterval(sendHeartbeat, 30000);
 
-    // Visibility
     const handleVisibilityChange = () => {
       if (document.hidden) document.title = "⚠️ CONNECTION PAUSED";
       else { document.title = "HUD ONLINE"; sendHeartbeat(); }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    // REALTIME SUBSCRIPTIONS
+    // 2. REALTIME SUBSCRIPTIONS
     const presence = supabase.channel('online-users').on('presence', { event: 'sync' }, () => setVisitors(Object.keys(presence.presenceState()).length)).subscribe();
 
     const logSub = supabase.channel('hud-logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_feed' }, (p) => {
-        const newLog = p.new;
-        setLogs(prev => [newLog, ...prev].slice(0, 20));
-        
-        // CRITICAL ALERT LOGIC
-        if (newLog.actor_type === 'ATTACKER' || newLog.action.includes('BAN')) { 
-            setThreatLevel('CRITICAL'); 
-            playSound('ALARM'); 
-            setTimeout(() => setThreatLevel('NORMAL'), 5000); 
-        } else { 
-            playSound('BLEEP'); 
-        }
-    }).subscribe();
-
-    const deviceSub = supabase.channel('device-uplink').on('postgres_changes', { event: '*', schema: 'public', table: 'device_telemetry' }, (p) => {
-          if (p.new) { setDeviceData({ online: true, url: p.new.current_url, threat: p.new.threat_score, lastSeen: new Date() }); }
+        setLogs(prev => [p.new, ...prev].slice(0, 20));
+        if (p.new.actor_type === 'ATTACKER' || p.new.action.includes('BAN')) { setThreatLevel('CRITICAL'); playSound('ALARM'); setTimeout(() => setThreatLevel('NORMAL'), 5000); } else { playSound('BLEEP'); }
     }).subscribe();
 
     const statusSub = supabase.channel('public-status-sync').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'admin_status' }, (p) => {
           if (p.new && p.new.current_task) setTask(p.new.current_task); 
     }).subscribe();
 
-    const deviceCheck = setInterval(() => { if (deviceData.lastSeen && (new Date() - deviceData.lastSeen > 15000)) { setDeviceData(prev => ({ ...prev, online: false })); } }, 5000);
+    // 3. DEVICE UPLINK (THE FIX)
+    const deviceSub = supabase.channel('device-uplink')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'device_telemetry' }, (p) => {
+          if (p.new) {
+              // Update Ref immediately so Watchdog sees it
+              lastHeartbeatRef.current = Date.now();
+              
+              setDeviceData({
+                  online: true,
+                  url: p.new.current_url,
+                  threat: p.new.threat_score
+              });
+          }
+      })
+      .subscribe();
+
+    // 4. WATCHDOG (Checks Ref instead of State)
+    const deviceCheck = setInterval(() => {
+        const timeSinceLastPulse = Date.now() - lastHeartbeatRef.current;
+        // Increased timeout to 25s to be safe against network lag
+        if (lastHeartbeatRef.current > 0 && timeSinceLastPulse > 25000) {
+            setDeviceData(prev => ({ ...prev, online: false }));
+        }
+    }, 5000);
 
     return () => { 
         clearInterval(timer); clearInterval(hbInt); clearInterval(deviceCheck);
         supabase.removeChannel(presence); supabase.removeChannel(logSub); supabase.removeChannel(deviceSub); supabase.removeChannel(statusSub);
         document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [auth, task, deviceData.lastSeen]);
+  }, [auth]); // Removed extra dependencies
 
-  // LOGIN UI
   if (!auth) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 font-mono">
