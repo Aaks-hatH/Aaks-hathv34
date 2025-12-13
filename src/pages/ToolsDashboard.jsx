@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EXIF from 'exif-js';
 
 // ==========================================
-// 1. ULTIMATE BRUTE FORCE ENGINE (Patched)
+// 1. ULTIMATE BRUTE FORCE ENGINE (With Mutations)
 // ==========================================
 function BruteForceSim() {
   const [target, setTarget] = useState('');
@@ -23,32 +23,26 @@ function BruteForceSim() {
   const [status, setStatus] = useState('IDLE'); 
   const [stats, setStats] = useState({ attempts: 0, speed: 0, current: '...' });
   
-  // Attack Configuration
   const [config, setConfig] = useState({
-    useCommon: true,   
-    useYears: false,   
-    useNumbers: false, 
-    useSymbols: false, 
-    useLeet: false      
+    useCommon: true,
+    useYears: false,
+    useNumbers: false,
+    useSymbols: false,
+    useLeet: false,
+    useMutations: false // <--- NEW: INJECTS SYMBOLS INSIDE WORDS
   });
 
   const stopRef = useRef(false);
   const startTimeRef = useRef(0);
 
-  // --- THE GENERATOR ---
   function* passwordGenerator(userKeywords) {
     let baseList = [...userKeywords];
     
-    if (config.useCommon) {
-        const common = ["password", "admin", "123456", "secret", "iloveyou", "welcome", "computer"];
-        baseList = [...baseList, ...common];
-    }
-
-    const symbols = ["!", "@", "#", "$", "%", "&", "*", "?"];
+    // 1. Expanded Symbol List (Includes parentheses and dashes now)
+    const symbols = ["!", "@", "#", "$", "%", "&", "*", "?", "-", "_", ".", "(", ")", "(--"];
     const leetMap = { 'a': '@', 'e': '3', 'i': '1', 'o': '0', 's': '$', 't': '7' };
 
     for (let word of baseList) {
-        // 1. Standard Variations
         const variations = [word, word.toLowerCase(), word.toUpperCase(), word.charAt(0).toUpperCase() + word.slice(1)];
         
         if (config.useLeet) {
@@ -56,42 +50,42 @@ function BruteForceSim() {
         }
 
         for (let v of variations) {
-            yield v; // Check base word
+            yield v; 
 
-            // A. SYMBOLS ONLY
+            // A. STANDARD APPENDING
             if (config.useSymbols) {
                 for (let s of symbols) yield v + s;
             }
-
-            // B. NUMBERS (+ SYMBOLS COMBO)
+            
             if (config.useNumbers) {
                 for (let i = 0; i < 1000; i++) {
-                    let numVar = v + i;
-                    yield numVar; // Check "admin987"
-
-                    // *** THE FIX: Check "admin987!" ***
+                    yield v + i;
                     if (config.useSymbols) {
-                        for (let s of symbols) yield numVar + s;
+                        for (let s of symbols) yield v + i + s;
                     }
                 }
             }
 
-            // C. YEARS (+ SYMBOLS COMBO)
-            if (config.useYears) {
-                for (let y = 1900; y <= 2030; y++) {
-                    let yearVar = v + y;
-                    yield yearVar; // Check "admin2025"
-
-                    if (config.useSymbols) {
-                        for (let s of symbols) yield yearVar + s; // Check "admin2025!"
+            // B. MUTATION MODE (The Fix for "aaksh(--at")
+            // This splits the word at every letter and injects symbols
+            if (config.useMutations) {
+                for (let i = 1; i < v.length; i++) {
+                    const start = v.slice(0, i);
+                    const end = v.slice(i);
+                    
+                    for (let s of symbols) {
+                        yield start + s + end;         // aaksh-at
+                        yield start + s + s + end;     // aaksh--at
+                        yield start + "(" + s + end;   // aaksh(-at
+                        yield start + s + ")" + end;   // aaksh-)at
                     }
                 }
             }
         }
     }
-
-    // 2. Failsafe Randoms (visual effect)
-    for(let i=0; i<10000; i++) yield Math.random().toString(36).substring(7);
+    
+    // Fallback Randoms
+    for(let i=0; i<50000; i++) yield Math.random().toString(36).substring(7);
   }
 
   const startAttack = () => {
@@ -107,30 +101,20 @@ function BruteForceSim() {
     
     const tick = () => {
         if (stopRef.current) return;
-
         const frameStart = performance.now();
         let currentGuess = '';
         let found = false;
 
-        // Run max speed for 12ms per frame
         while (performance.now() - frameStart < 12) {
             const next = iterator.next();
-            if (next.done) {
-                setStatus('FAILED');
-                return;
-            }
+            if (next.done) { setStatus('FAILED'); return; }
             currentGuess = next.value;
             totalAttempts++;
-
-            if (currentGuess === target) {
-                found = true;
-                break;
-            }
+            if (currentGuess === target) { found = true; break; }
         }
 
         const totalElapsed = (performance.now() - startTimeRef.current) / 1000;
         const speed = Math.floor(totalAttempts / totalElapsed) || 0;
-
         setStats({ attempts: totalAttempts, speed, current: currentGuess });
 
         if (found) {
@@ -140,88 +124,37 @@ function BruteForceSim() {
             requestAnimationFrame(tick);
         }
     };
-
     tick();
   };
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
-        <Input 
-          type="password" placeholder="Target Password" value={target}
-          onChange={e => setTarget(e.target.value)}
-          className="bg-slate-950 border-slate-700 text-xs text-red-500 font-bold"
-          disabled={status === 'RUNNING'}
-        />
-        <Input 
-          placeholder="Keywords (e.g. admin)" value={hints}
-          onChange={e => setHints(e.target.value)}
-          className="bg-slate-950 border-slate-700 text-xs"
-          disabled={status === 'RUNNING'}
-        />
+        <Input type="password" placeholder="Target" value={target} onChange={e => setTarget(e.target.value)} className="bg-slate-950 border-slate-700 text-xs text-red-500 font-bold" disabled={status === 'RUNNING'} />
+        <Input placeholder="Keywords" value={hints} onChange={e => setHints(e.target.value)} className="bg-slate-950 border-slate-700 text-xs" disabled={status === 'RUNNING'} />
       </div>
 
       <div className="grid grid-cols-2 gap-2 p-2 bg-slate-900/50 rounded border border-slate-800">
-        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={config.useNumbers} onChange={e => setConfig({...config, useNumbers: e.target.checked})} />
-            <span>Deep Numbers (0-999)</span>
-        </label>
-        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={config.useYears} onChange={e => setConfig({...config, useYears: e.target.checked})} />
-            <span>Years (1900-2030)</span>
-        </label>
-        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={config.useSymbols} onChange={e => setConfig({...config, useSymbols: e.target.checked})} />
-            <span>Symbols (!@#$)</span>
-        </label>
-        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={config.useLeet} onChange={e => setConfig({...config, useLeet: e.target.checked})} />
-            <span>Leet Speak (a=@)</span>
-        </label>
+        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer"><input type="checkbox" checked={config.useNumbers} onChange={e => setConfig({...config, useNumbers: e.target.checked})} /><span>Deep Numbers</span></label>
+        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer"><input type="checkbox" checked={config.useYears} onChange={e => setConfig({...config, useYears: e.target.checked})} /><span>Years</span></label>
+        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer"><input type="checkbox" checked={config.useSymbols} onChange={e => setConfig({...config, useSymbols: e.target.checked})} /><span>Symbols (!@#)</span></label>
+        <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer"><input type="checkbox" checked={config.useLeet} onChange={e => setConfig({...config, useLeet: e.target.checked})} /><span>Leet Speak</span></label>
+        {/* NEW TOGGLE */}
+        <label className="flex items-center gap-2 text-[10px] text-red-400 cursor-pointer col-span-2 border-t border-slate-800 pt-2"><input type="checkbox" checked={config.useMutations} onChange={e => setConfig({...config, useMutations: e.target.checked})} /><span>🧬 Mutation Mode (Injects middle symbols)</span></label>
       </div>
 
-      <Button 
-        onClick={startAttack} 
-        disabled={status === 'RUNNING' || !target} 
-        className={`w-full font-bold tracking-widest ${status === 'CRACKED' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
-      >
-        {status === 'RUNNING' ? "CRACKING..." : status === 'CRACKED' ? "PASSWORD PWNED" : "INITIATE ATTACK"}
-      </Button>
+      <Button onClick={startAttack} disabled={status === 'RUNNING' || !target} className={`w-full font-bold tracking-widest ${status === 'CRACKED' ? 'bg-green-600' : 'bg-red-600'}`}>{status === 'RUNNING' ? "CRACKING..." : status === 'CRACKED' ? "PWNED" : "INITIATE ATTACK"}</Button>
 
       <div className="bg-black p-4 rounded border border-slate-800 font-mono text-xs space-y-3 relative overflow-hidden h-36">
         <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-            <div className="flex items-center gap-2">
-                <Activity className={`w-3 h-3 ${status === 'RUNNING' ? 'text-green-500 animate-pulse' : 'text-slate-600'}`} />
-                <span className="text-slate-400">HASH RATE:</span>
-                <span className="text-orange-500 font-bold">{stats.speed.toLocaleString()} P/s</span>
-            </div>
+            <div className="flex items-center gap-2"><Activity className={`w-3 h-3 ${status === 'RUNNING' ? 'text-green-500 animate-pulse' : 'text-slate-600'}`} /><span className="text-slate-400">HASH RATE:</span><span className="text-orange-500 font-bold">{stats.speed.toLocaleString()} P/s</span></div>
             <div className="text-slate-500">{status}</div>
         </div>
-
-        <div className="text-center py-4 relative">
-            <div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">CURRENT GUESS</div>
-            <div className={`text-2xl font-bold font-mono tracking-wider truncate ${status === 'CRACKED' ? 'text-green-400 scale-110' : 'text-slate-200 blur-[1px]'}`}>
-                {status === 'IDLE' ? 'WAITING...' : stats.current}
-            </div>
-        </div>
-
-        <div className="flex justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-800">
-            <span>TRIED: <span className="text-white">{stats.attempts.toLocaleString()}</span></span>
-            <span>STRATEGY: <span className="text-cyan-500">HYBRID_MASK</span></span>
-        </div>
+        <div className="text-center py-4 relative"><div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">CURRENT GUESS</div><div className={`text-2xl font-bold font-mono tracking-wider truncate ${status === 'CRACKED' ? 'text-green-400 scale-110' : 'text-slate-200 blur-[1px]'}`}>{status === 'IDLE' ? 'WAITING...' : stats.current}</div></div>
+        <div className="flex justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-800"><span>TRIED: <span className="text-white">{stats.attempts.toLocaleString()}</span></span><span>STRATEGY: <span className="text-cyan-500">MUTATION_X</span></span></div>
       </div>
-
-      {status === 'CRACKED' && (
-         <div className="p-3 bg-green-900/20 border border-green-500/50 text-green-400 text-center text-xs animate-in zoom-in shadow-[0_0_20px_rgba(34,197,94,0.2)]">
-            🔓 MATCH FOUND: <span className="font-bold bg-green-950 px-2 py-1 rounded border border-green-500/30">{target}</span>
-         </div>
-      )}
-      
-      {status === 'FAILED' && (
-         <div className="p-3 bg-red-900/20 border border-red-500/50 text-red-400 text-center text-xs">
-            ❌ EXHAUSTED WORDLIST.
-         </div>
-      )}
+      {status === 'CRACKED' && (<div className="p-3 bg-green-900/20 border border-green-500/50 text-green-400 text-center text-xs animate-in zoom-in shadow-[0_0_20px_rgba(34,197,94,0.2)]">🔓 MATCH FOUND: <span className="font-bold bg-green-950 px-2 py-1 rounded border border-green-500/30">{target}</span></div>)}
+      {status === 'FAILED' && (<div className="p-3 bg-red-900/20 border border-red-500/50 text-red-400 text-center text-xs">❌ EXHAUSTED WORDLIST.</div>)}
     </div>
   );
 }
