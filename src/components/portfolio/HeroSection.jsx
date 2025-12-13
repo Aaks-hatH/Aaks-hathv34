@@ -12,12 +12,27 @@ export default function HeroSection() {
   const [weather, setWeather] = useState(null);
   const [visitCount, setVisitCount] = useState(0);
   const [isSleeping, setIsSleeping] = useState(false);
+  
   const [adminStatus, setAdminStatus] = useState({ online: false, task: 'System Idle' });
 
   useEffect(() => {
-    // 🚩 FLAG HIDDEN HERE
-    console.log("%c INTERESTED IN MY CODE?", "color: #0ea5e9; font-size: 20px; font-weight: bold;");
-    console.log("%c If you are looking for a flag, start here: flag{console_cowboy}", "color: #333; background: #ccc; padding: 5px; border-radius: 4px;");
+    // 🚩 FLAG 1: THE CONSOLE COWBOY (Stylized Log)
+    // This appears in the Browser Console (F12) immediately on load.
+    setTimeout(() => {
+        console.clear(); // Clear initial noise
+        console.log(
+            "%c 🚩 CTF CHALLENGE ACTIVE 🚩", 
+            "color: #00ff00; font-size: 24px; font-weight: bold; background: #000; padding: 10px; border: 2px solid #00ff00;"
+        );
+        console.log(
+            "%c[HINT] The first flag is right here: flag{console_cowboy}", 
+            "color: #0ea5e9; font-size: 16px; font-family: monospace;"
+        );
+        console.log(
+            "%c[HINT] For the next one, inspect the 'Headers' of this request...", 
+            "color: #888; font-size: 12px; font-style: italic;"
+        );
+    }, 1000);
 
     const timer = setInterval(() => {
       const now = new Date();
@@ -84,9 +99,14 @@ export default function HeroSection() {
       
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-4 mb-8">
         <span className="text-4xl drop-shadow-md grayscale-[0.2]">🇺🇸</span>
+        
         <div className="flex gap-3 text-[11px] font-bold tracking-wide">
-            <div className="bg-slate-800/80 border border-slate-700 px-3 py-1 rounded text-slate-400">Unique visitors: <span className="text-cyan-400">12,403</span></div>
-            <div className="bg-slate-800/80 border border-slate-700 px-3 py-1 rounded text-slate-400">Visits today: <span className="text-cyan-400">{visitCount}</span></div>
+            <div className="bg-slate-800/80 border border-slate-700 px-3 py-1 rounded text-slate-400">
+                Unique visitors: <span className="text-cyan-400">12,403</span>
+            </div>
+            <div className="bg-slate-800/80 border border-slate-700 px-3 py-1 rounded text-slate-400">
+                Visits today: <span className="text-cyan-400">{visitCount}</span>
+            </div>
         </div>
       </motion.div>
 
@@ -96,7 +116,9 @@ export default function HeroSection() {
         <span className="text-cyan-500">/&gt;</span>
       </motion.h1>
 
-      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="text-sm md:text-base text-slate-400 mb-8">OSINT Analyst <span className="mx-2 text-slate-600">|</span> Fullstack Developer <span className="mx-2 text-slate-600">|</span> Red Team</motion.p>
+      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="text-sm md:text-base text-slate-400 mb-8">
+        OSINT Analyst <span className="mx-2 text-slate-600">|</span> Fullstack Developer <span className="mx-2 text-slate-600">|</span> Red Team
+      </motion.p>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="max-w-2xl text-center space-y-2 mb-10 text-xs md:text-sm leading-relaxed text-slate-400">
         <p>I’m an OSINT-driven cybersecurity researcher turning information into insight.</p>
