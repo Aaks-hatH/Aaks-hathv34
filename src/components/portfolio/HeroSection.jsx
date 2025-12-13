@@ -32,6 +32,22 @@ export default function HeroSection() {
     fetchLanyard();
     setInterval(fetchLanyard, 30000);
 
+    const statusSub = supabase.channel('public-status') // Channel name can be anything unique
+      .on('postgres_changes', { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'admin_status' // MUST MATCH TABLE NAME
+      }, (payload) => {
+          if(payload.new) {
+            // Update state with new task
+            setAdminStatus({ 
+                online: payload.new.is_online === true, 
+                task: payload.new.current_task 
+            });
+          }
+      })
+      .subscribe();
+
     const fetchWeather = async () => {
         try {
             const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.00&current_weather=true');
