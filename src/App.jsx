@@ -9,6 +9,7 @@ import ToolsDashboard from '@/pages/ToolsDashboard';
 import Admin from '@/pages/Admin';
 import HUD from '@/pages/HUD';
 import FakeLogin from '@/pages/FakeLogin';
+import NotFound from '@/pages/NotFound';
 
 // Components
 import KonamiCode from '@/components/portfolio/KonamiCode';
@@ -53,6 +54,9 @@ function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/hud" element={<HUD />} />
           <Route path="/login" element={<FakeLogin />} />
+          
+          {/* CATCH ALL 404 ROUTE (MUST BE LAST) */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
