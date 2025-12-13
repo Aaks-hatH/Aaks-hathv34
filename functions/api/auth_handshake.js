@@ -121,7 +121,7 @@ export async function onRequestPost(context) {
             actor_type: 'ATTACKER', ip: clientIP, action: 'AUTO_BAN', details: `Score: ${riskScore} | ${riskFactors.join(', ')}` 
         });
         
-        const msg = `**🚨 SIEM BAN EXECUTION**\n**Target:** ${clientIP} (${country})\n**Risk Score:** ${riskScore}/100\n**Reasons:**\n- ${riskFactors.join('\n- ')}`;
+        const msg = `** SIEM BAN EXECUTION**\n**Target:** ${clientIP} (${country})\n**Risk Score:** ${riskScore}/100\n**Reasons:**\n- ${riskFactors.join('\n- ')}`;
         sendDiscord(`<@${ADMIN_ID}>\n${msg}`);
         context.waitUntil(sendEmailAlert(context, "CRITICAL: SIEM Ban", msg));
         
@@ -186,7 +186,7 @@ export async function onRequestPost(context) {
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         await supabase.from('system_config').upsert({ key: 'temp_auth_code', value: code });
         
-        sendDiscord(`<@${ADMIN_ID}>\n**🛡️ SECURITY CHALLENGE**\n**Reason:** ${riskFactors.join(', ')}\n**Score:** ${riskScore}\n**Verification Code:** \`${code}\``);
+        sendDiscord(`<@${ADMIN_ID}>\n** SECURITY CHALLENGE**\n**Reason:** ${riskFactors.join(', ')}\n**Score:** ${riskScore}\n**Verification Code:** \`${code}\``);
         
         return new Response(JSON.stringify({ 
             stepUp: true, 
