@@ -12,10 +12,10 @@ const playSound = (type) => {
   gain.connect(ctx.destination);
 
   if (type === 'BLEEP') {
-    osc.type = 'sine'; osc.frequency.setValueAtTime(2000, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(3000, ctx.currentTime + 0.1); gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1); osc.start(); osc.stop(ctx.currentTime + 0.1);
+    osc.type = 'sine'; osc.frequency.setValueAtTime(2000, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(3000, ctx.currentTime + 1); gain.gain.setValueAtTime(1, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1); osc.start(); osc.stop(ctx.currentTime + 1);
   } 
   if (type === 'ALARM') {
-    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(800, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.6); gain.gain.setValueAtTime(0.4, ctx.currentTime); gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.6); osc.start(); osc.stop(ctx.currentTime + 0.6);
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(800, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 1); gain.gain.setValueAtTime(0.8, ctx.currentTime); gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 1); osc.start(); osc.stop(ctx.currentTime + 1);
   }
 };
 
