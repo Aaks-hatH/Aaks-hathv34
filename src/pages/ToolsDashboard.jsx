@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EXIF from 'exif-js';
 
 // ==========================================
-// 1. ULTIMATE BRUTE FORCE ENGINE (Configurable)
+// 1. ULTIMATE BRUTE FORCE ENGINE (Patched)
 // ==========================================
 function BruteForceSim() {
   const [target, setTarget] = useState('');
@@ -25,75 +25,73 @@ function BruteForceSim() {
   
   // Attack Configuration
   const [config, setConfig] = useState({
-    useCommon: true,   // Add top 100 common passwords
-    useYears: false,    // Append 1900-2030
-    useNumbers: false,  // Append 0-999
-    useSymbols: false,  // Append !@#$%
-    useLeet: false      // Convert e->3, a->@
+    useCommon: true,   
+    useYears: false,   
+    useNumbers: false, 
+    useSymbols: false, 
+    useLeet: false      
   });
 
   const stopRef = useRef(false);
   const startTimeRef = useRef(0);
 
-  // --- THE MILLION-WORD GENERATOR ---
+  // --- THE GENERATOR ---
   function* passwordGenerator(userKeywords) {
-    // 1. Base Dictionary
     let baseList = [...userKeywords];
     
     if (config.useCommon) {
-        const common = ["password", "admin", "123456", "secret", "iloveyou", "football", "monkey", "dragon", "superman", "welcome", "computer"];
+        const common = ["password", "admin", "123456", "secret", "iloveyou", "welcome", "computer"];
         baseList = [...baseList, ...common];
     }
 
     const symbols = ["!", "@", "#", "$", "%", "&", "*", "?"];
     const leetMap = { 'a': '@', 'e': '3', 'i': '1', 'o': '0', 's': '$', 't': '7' };
 
-    // 2. Iterate through every base word
     for (let word of baseList) {
-        // Raw word
-        yield word;
-        yield word.toLowerCase();
-        yield word.toUpperCase();
-        // Capitalize
-        yield word.charAt(0).toUpperCase() + word.slice(1);
-
-        // A. Leet Speak
+        // 1. Standard Variations
+        const variations = [word, word.toLowerCase(), word.toUpperCase(), word.charAt(0).toUpperCase() + word.slice(1)];
+        
         if (config.useLeet) {
-            let leet = word.toLowerCase().split('').map(c => leetMap[c] || c).join('');
-            yield leet;
-            yield leet.toUpperCase();
+            variations.push(word.toLowerCase().split('').map(c => leetMap[c] || c).join(''));
         }
 
-        // B. Year Append (1900 - 2030) -> Adds 130 variations per word
-        if (config.useYears) {
-            for (let y = 1900; y <= 2030; y++) {
-                yield word + y;
-                yield word + "@" + y;
+        for (let v of variations) {
+            yield v; // Check base word
+
+            // A. SYMBOLS ONLY
+            if (config.useSymbols) {
+                for (let s of symbols) yield v + s;
             }
-        }
 
-        // C. Deep Number Scan (0 - 999) -> Adds 1000 variations per word
-        if (config.useNumbers) {
-            for (let i = 0; i < 1000; i++) {
-                yield word + i;
-                yield word + i.toString().padStart(2, '0'); // 01, 02
+            // B. NUMBERS (+ SYMBOLS COMBO)
+            if (config.useNumbers) {
+                for (let i = 0; i < 1000; i++) {
+                    let numVar = v + i;
+                    yield numVar; // Check "admin987"
+
+                    // *** THE FIX: Check "admin987!" ***
+                    if (config.useSymbols) {
+                        for (let s of symbols) yield numVar + s;
+                    }
+                }
             }
-        }
 
-        // D. Symbol Suffix -> Adds 8 variations per word
-        if (config.useSymbols) {
-            for (let s of symbols) {
-                yield word + s;
-                yield word + "123" + s;
+            // C. YEARS (+ SYMBOLS COMBO)
+            if (config.useYears) {
+                for (let y = 1900; y <= 2030; y++) {
+                    let yearVar = v + y;
+                    yield yearVar; // Check "admin2025"
+
+                    if (config.useSymbols) {
+                        for (let s of symbols) yield yearVar + s; // Check "admin2025!"
+                    }
+                }
             }
         }
     }
 
-    // 3. Last Resort: Pure Chaos (If enabled, runs almost forever)
-    // We limit this to a few thousand randoms to prevent infinite loops in this demo
-    for(let i=0; i<50000; i++) {
-        yield Math.random().toString(36).substring(7);
-    }
+    // 2. Failsafe Randoms (visual effect)
+    for(let i=0; i<10000; i++) yield Math.random().toString(36).substring(7);
   }
 
   const startAttack = () => {
@@ -107,7 +105,6 @@ function BruteForceSim() {
     
     let totalAttempts = 0;
     
-    // THE HIGH-SPEED LOOP
     const tick = () => {
         if (stopRef.current) return;
 
@@ -115,7 +112,7 @@ function BruteForceSim() {
         let currentGuess = '';
         let found = false;
 
-        // Process as many as possible in 12ms (Targeting 60FPS)
+        // Run max speed for 12ms per frame
         while (performance.now() - frameStart < 12) {
             const next = iterator.next();
             if (next.done) {
@@ -131,15 +128,10 @@ function BruteForceSim() {
             }
         }
 
-        // Update Stats
         const totalElapsed = (performance.now() - startTimeRef.current) / 1000;
         const speed = Math.floor(totalAttempts / totalElapsed) || 0;
 
-        setStats({ 
-            attempts: totalAttempts, 
-            speed: speed, 
-            current: currentGuess 
-        });
+        setStats({ attempts: totalAttempts, speed, current: currentGuess });
 
         if (found) {
             setStatus('CRACKED');
@@ -154,7 +146,6 @@ function BruteForceSim() {
 
   return (
     <div className="space-y-4">
-      {/* Inputs */}
       <div className="grid grid-cols-2 gap-2">
         <Input 
           type="password" placeholder="Target Password" value={target}
@@ -170,7 +161,6 @@ function BruteForceSim() {
         />
       </div>
 
-      {/* Configuration Toggles */}
       <div className="grid grid-cols-2 gap-2 p-2 bg-slate-900/50 rounded border border-slate-800">
         <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer">
             <input type="checkbox" checked={config.useNumbers} onChange={e => setConfig({...config, useNumbers: e.target.checked})} />
@@ -190,7 +180,6 @@ function BruteForceSim() {
         </label>
       </div>
 
-      {/* Start Button */}
       <Button 
         onClick={startAttack} 
         disabled={status === 'RUNNING' || !target} 
@@ -199,7 +188,6 @@ function BruteForceSim() {
         {status === 'RUNNING' ? "CRACKING..." : status === 'CRACKED' ? "PASSWORD PWNED" : "INITIATE ATTACK"}
       </Button>
 
-      {/* Visualizer */}
       <div className="bg-black p-4 rounded border border-slate-800 font-mono text-xs space-y-3 relative overflow-hidden h-36">
         <div className="flex justify-between items-center border-b border-slate-800 pb-2">
             <div className="flex items-center gap-2">
@@ -219,7 +207,7 @@ function BruteForceSim() {
 
         <div className="flex justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-800">
             <span>TRIED: <span className="text-white">{stats.attempts.toLocaleString()}</span></span>
-            <span>STRATEGY: <span className="text-cyan-500">HYBRID_DICT</span></span>
+            <span>STRATEGY: <span className="text-cyan-500">HYBRID_MASK</span></span>
         </div>
       </div>
 
@@ -231,13 +219,12 @@ function BruteForceSim() {
       
       {status === 'FAILED' && (
          <div className="p-3 bg-red-900/20 border border-red-500/50 text-red-400 text-center text-xs">
-            ❌ DICTIONARY EXHAUSTED. PASSWORD TOO STRONG.
+            ❌ EXHAUSTED WORDLIST.
          </div>
       )}
     </div>
   );
 }
-
 
 function AiCodeAuditor() {
   const [code, setCode] = useState('');
