@@ -31,7 +31,9 @@ export default function NotFound() {
           The requested path does not exist in this sector. <br/>
           Connection terminated.
         </p>
-
+        
+<p className="text-slate-400 text-sm mb-8 font-mono"> Are you a hacker?</p>
+        
         <div className="flex gap-4 justify-center">
             <Link to="/">
                 <Button className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">
