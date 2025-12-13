@@ -45,16 +45,27 @@ export default function HUD() {
   useEffect(() => {
     if (!auth) return;
     
+    // A. WAKE LOCK (Keep screen on)
     let wakeLock = null;
-    const requestWakeLock = async () => { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {} };
+    const requestWakeLock = async () => {
+      try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+    };
     requestWakeLock();
 
+    // B. CLOCK
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
-    const sendHeartbeat = () => { fetch('/api/stream_keepalive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, task, status: true }) }).catch(() => console.log("Heartbeat failed")); };
-    sendHeartbeat();
-    const hbInt = setInterval(sendHeartbeat, 30000);
+    // C. HEARTBEAT (Dead Man's Switch - Keep Alive)
+    const sendHeartbeat = () => {
+      fetch('/api/stream_keepalive', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, task, status: true })
+      }).catch(() => console.log("Heartbeat failed"));
+    };
+    sendHeartbeat(); // Immediate pulse
+    const hbInt = setInterval(sendHeartbeat, 30000); // Repeat every 30s
 
+    // D. PAGE VISIBILITY WARNING
     const handleVisibilityChange = () => {
       if (document.hidden) document.title = "⚠️ CONNECTION PAUSED";
       else {
@@ -64,23 +75,67 @@ export default function HUD() {
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    const presence = supabase.channel('online-users').on('presence', { event: 'sync' }, () => setVisitors(Object.keys(presence.presenceState()).length)).subscribe();
+    // --- REALTIME SUBSCRIPTIONS ---
 
-    // UPDATED: Now listens to 'live_feed' instead of 'audit_logs' because of the security lock
-    const logSub = supabase.channel('hud-logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_feed' }, (p) => {
-        setLogs(prev => [p.new, ...prev].slice(0, 20));
-        if (p.new.actor_type === 'ATTACKER' || p.new.action.includes('BAN')) { setThreatLevel('CRITICAL'); playSound('ALARM'); setTimeout(() => setThreatLevel('NORMAL'), 5000); } else { playSound('BLEEP'); }
-    }).subscribe();
+    // 1. VISITORS (Presence)
+    const presence = supabase.channel('online-users')
+      .on('presence', { event: 'sync' }, () => setVisitors(Object.keys(presence.presenceState()).length))
+      .subscribe();
 
-    const deviceSub = supabase.channel('device-uplink').on('postgres_changes', { event: '*', schema: 'public', table: 'device_telemetry' }, (p) => {
-          if (p.new) { setDeviceData({ online: true, url: p.new.current_url, threat: p.new.threat_score, lastSeen: new Date() }); }
-    }).subscribe();
+    // 2. LOGS (Live Feed)
+    const logSub = supabase.channel('hud-logs')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_feed' }, (p) => {
+        const newLog = p.new;
+        setLogs(prev => [newLog, ...prev].slice(0, 20));
+        
+        if (newLog.actor_type === 'ATTACKER' || newLog.action.includes('BAN')) {
+            setThreatLevel('CRITICAL');
+            playSound('ALARM');
+            setTimeout(() => setThreatLevel('NORMAL'), 5000);
+        } else {
+            playSound('BLEEP');
+        }
+      })
+      .subscribe();
 
-    const deviceCheck = setInterval(() => { if (deviceData.lastSeen && (new Date() - deviceData.lastSeen > 15000)) { setDeviceData(prev => ({ ...prev, online: false })); } }, 5000);
+    // 3. HARDWARE UPLINK (Extension Details)
+    const deviceSub = supabase.channel('device-uplink')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'device_telemetry' }, (p) => {
+          if (p.new) {
+              setDeviceData({
+                  online: true,
+                  url: p.new.current_url,
+                  threat: p.new.threat_score,
+                  lastSeen: new Date()
+              });
+          }
+      })
+      .subscribe();
 
+    // 4. SYNC CURRENT OBJECTIVE (Auto-Type from Extension)
+    // This connects the text box to your browser activity
+    const statusSub = supabase.channel('public-status-sync')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'admin_status' }, (p) => {
+          if (p.new && p.new.current_task) {
+              setTask(p.new.current_task); 
+          }
+      })
+      .subscribe();
+
+    // E. DEVICE WATCHDOG (Check if extension went offline)
+    const deviceCheck = setInterval(() => {
+        if (deviceData.lastSeen && (new Date() - deviceData.lastSeen > 15000)) {
+            setDeviceData(prev => ({ ...prev, online: false }));
+        }
+    }, 5000);
+
+    // CLEANUP
     return () => { 
         clearInterval(timer); clearInterval(hbInt); clearInterval(deviceCheck);
-        supabase.removeChannel(presence); supabase.removeChannel(logSub); supabase.removeChannel(deviceSub);
+        supabase.removeChannel(presence); 
+        supabase.removeChannel(logSub); 
+        supabase.removeChannel(deviceSub);
+        supabase.removeChannel(statusSub);
         document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [auth, task, deviceData.lastSeen]);
