@@ -15,124 +15,125 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EXIF from 'exif-js';
 
 // ==========================================
-// 1. SMART BRUTE FORCE SIMULATOR (NEW)
+// 1. ADVANCED BRUTE FORCE ENGINE (Lazy Generator)
 // ==========================================
 function BruteForceSim() {
   const [target, setTarget] = useState('');
   const [hints, setHints] = useState('');
-  const [status, setStatus] = useState('IDLE'); // IDLE, GEN, RUNNING, CRACKED, FAILED
+  const [status, setStatus] = useState('IDLE'); 
   const [stats, setStats] = useState({ attempts: 0, speed: 0, current: '...' });
-  const [progress, setProgress] = useState(0); // For wordlist generation
   
-  // Refs for performance (Variables that don't trigger re-renders)
-  const wordlistRef = useRef([]);
   const stopRef = useRef(false);
   const startTimeRef = useRef(0);
 
-  // --- PHASE 1: GENERATE WORDLIST ---
-  const generateWordlist = async () => {
-    if (!target || !hints) return;
-    setStatus('GEN');
-    setProgress(0);
-    stopRef.current = false;
-
-    // Small delay to let UI update
-    await new Promise(r => setTimeout(r, 100));
-
-    const keywords = hints.split(',').map(s => s.trim()).filter(s => s.length > 0);
-    const symbols = ["!", "@", "#", "$", "123", "1", "2024", "2025"];
-    let generated = [];
-
-    // 1. Basic Permutations
-    keywords.forEach(word => {
-        generated.push(word);
-        generated.push(word.toUpperCase());
-        generated.push(word.toLowerCase());
-        generated.push(word.charAt(0).toUpperCase() + word.slice(1)); // Capitalize
+  // --- GENERATOR LOGIC ---
+  // This creates passwords on the fly. No arrays, no memory crash.
+  function* passwordGenerator(keywords) {
+    const symbols = ["!", "@", "#", "$", "%", "&", "*", "123", "007", "2024", "2025"];
+    const leetMap = { 'a': '@', 'e': '3', 'i': '1', 'o': '0', 's': '$', 't': '7' };
+    
+    // 1. SINGLE WORD VARIATIONS
+    for (let word of keywords) {
+        yield word;
+        yield word.toUpperCase();
+        yield word.toLowerCase();
+        // Capitalize
+        yield word.charAt(0).toUpperCase() + word.slice(1);
         
-        // 2. Append Symbols/Numbers
-        symbols.forEach(sym => {
-            generated.push(word + sym);
-            generated.push(sym + word);
-            generated.push(word + sym + "!");
-        });
-    });
+        // Leet Speak (Simple)
+        let leet = word.split('').map(c => leetMap[c.toLowerCase()] || c).join('');
+        yield leet;
 
-    // 3. Combine Keywords (Combo attacks)
-    if (keywords.length > 1) {
-        for (let i = 0; i < keywords.length; i++) {
-            for (let j = 0; j < keywords.length; j++) {
-                if (i !== j) {
-                    const combo = keywords[i] + keywords[j];
-                    generated.push(combo);
-                    symbols.forEach(sym => generated.push(combo + sym));
+        // Append/Prepend Numbers (0-1000) - This adds 2000 checks per word
+        for (let i = 0; i <= 1000; i++) {
+            yield word + i;
+            yield i + word;
+        }
+
+        // Append Symbols
+        for (let sym of symbols) {
+            yield word + sym;
+            yield sym + word;
+            yield word + sym + word; // pattern-symbol-pattern
+        }
+    }
+
+    // 2. COMBO VARIATIONS (Word + Word)
+    // If you input 3 keywords, this creates exponential growth
+    for (let w1 of keywords) {
+        for (let w2 of keywords) {
+            if (w1 !== w2) {
+                yield w1 + w2;
+                yield w1 + "_" + w2;
+                yield w1 + w2 + "123";
+                yield w1 + w2 + "!";
+                
+                // Deep Number Scan on Combos (0-99)
+                for(let i=0; i<100; i++) {
+                    yield w1 + w2 + i;
                 }
             }
         }
     }
 
-    // 4. Fill with random noise to simulate "Millions" (for effect)
-    // Realistically, we generate about 50k-100k items here to keep memory safe but look cool
-    for (let i = 0; i < 20000; i++) {
-        generated.push(Math.random().toString(36).substring(7));
+    // 3. BRUTE NOISE (Fallback)
+    // If we haven't found it yet, simulate pure random alphanumerics
+    // This allows the counter to go into the millions effectively forever
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    while(true) {
+        let res = "";
+        for(let i=0; i<8; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
+        yield res;
     }
+  }
 
-    // Ensure target is in there if the user followed rules (Cheating for demo purposes? Optional.)
-    // Let's NOT cheat. If their hints are bad, they fail. That's real hacking.
-    
-    wordlistRef.current = generated;
-    setProgress(100);
-    startAttack(); // Auto-start Phase 2
-  };
-
-  // --- PHASE 2: HIGH SPEED ATTACK ---
   const startAttack = () => {
+    if (!target || !hints) return;
     setStatus('RUNNING');
+    stopRef.current = false;
     startTimeRef.current = performance.now();
+
+    const keywords = hints.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    const iterator = passwordGenerator(keywords);
     
-    let index = 0;
-    const list = wordlistRef.current;
-    const total = list.length;
+    let totalAttempts = 0;
     
-    // THE ENGINE
+    // THE LOOP
     const tick = () => {
         if (stopRef.current) return;
 
-        // Process a "Batch" (Chunk)
-        const batchSize = 2000; // Check 2000 passwords per frame
+        const frameStart = performance.now();
+        let currentGuess = '';
         let found = false;
-        let i = 0;
 
-        while (i < batchSize && index < total) {
-            const guess = list[index];
-            
-            if (guess === target) {
+        // Run for 12ms per frame (Leaves 4ms for React to render 60fps)
+        while (performance.now() - frameStart < 12) {
+            const next = iterator.next();
+            currentGuess = next.value;
+            totalAttempts++;
+
+            if (currentGuess === target) {
                 found = true;
                 break;
             }
-            index++;
-            i++;
         }
 
-        // Stats Calculation
-        const now = performance.now();
-        const elapsed = (now - startTimeRef.current) / 1000;
-        const speed = Math.floor(index / elapsed) || 0;
+        // Calculate Speed (Hashes per second)
+        const totalElapsed = (performance.now() - startTimeRef.current) / 1000;
+        const speed = Math.floor(totalAttempts / totalElapsed);
 
-        // Update UI
         setStats({ 
-            attempts: index, 
+            attempts: totalAttempts, 
             speed: speed, 
-            current: list[index] || '...' 
+            current: currentGuess 
         });
 
         if (found) {
             setStatus('CRACKED');
+            // If we found it, show the target
             setStats(prev => ({ ...prev, current: target }));
-        } else if (index >= total) {
-            setStatus('FAILED');
         } else {
-            // Keep going (Non-blocking recursion)
+            // Keep looping
             requestAnimationFrame(tick);
         }
     };
@@ -145,14 +146,14 @@ function BruteForceSim() {
       <div className="grid grid-cols-2 gap-2">
         <Input 
           type="password"
-          placeholder="Target Password" 
+          placeholder="Target (e.g. admin2025!)" 
           value={target}
           onChange={e => setTarget(e.target.value)}
-          className="bg-slate-950 border-slate-700 text-xs"
+          className="bg-slate-950 border-slate-700 text-xs text-red-500 font-bold"
           disabled={status === 'RUNNING'}
         />
         <Input 
-          placeholder="Keywords (comma sep)" 
+          placeholder="Keywords (e.g. admin, 2025)" 
           value={hints}
           onChange={e => setHints(e.target.value)}
           className="bg-slate-950 border-slate-700 text-xs"
@@ -161,59 +162,46 @@ function BruteForceSim() {
       </div>
 
       <Button 
-        onClick={generateWordlist} 
+        onClick={startAttack} 
         disabled={status === 'RUNNING' || !target || !hints} 
-        className={`w-full ${status === 'CRACKED' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
+        className={`w-full font-bold tracking-widest ${status === 'CRACKED' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
       >
-        {status === 'GEN' ? "GENERATING WORDLIST..." : status === 'RUNNING' ? "CRACKING..." : status === 'CRACKED' ? "PASSWORD FOUND" : "INITIATE ATTACK"}
+        {status === 'RUNNING' ? "CRACKING..." : status === 'CRACKED' ? "PASSWORD PWNED" : "INITIATE ATTACK"}
       </Button>
 
-      <div className="bg-black p-4 rounded border border-slate-800 font-mono text-xs space-y-3 relative overflow-hidden h-32">
+      <div className="bg-black p-4 rounded border border-slate-800 font-mono text-xs space-y-3 relative overflow-hidden h-36">
         
-        {/* Status Header */}
+        {/* Header */}
         <div className="flex justify-between items-center border-b border-slate-800 pb-2">
             <div className="flex items-center gap-2">
                 <Activity className={`w-3 h-3 ${status === 'RUNNING' ? 'text-green-500 animate-pulse' : 'text-slate-600'}`} />
-                <span className="text-slate-400">ENGINE STATUS:</span>
-                <span className={status === 'CRACKED' ? 'text-green-500 font-bold' : 'text-white'}>{status}</span>
+                <span className="text-slate-400">HASH RATE:</span>
+                <span className="text-orange-500 font-bold">{stats.speed.toLocaleString()} P/s</span>
             </div>
-            {status === 'RUNNING' && <div className="text-orange-500 font-bold">{stats.speed.toLocaleString()} H/s</div>}
+            <div className="text-slate-500">{status}</div>
         </div>
 
-        {/* The Rapid Fire Visual */}
-        <div className="text-center py-2">
-            <div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">CURRENT GUESS</div>
-            <div className={`text-xl font-bold font-mono tracking-wider truncate ${status === 'CRACKED' ? 'text-green-400 scale-110' : 'text-slate-300'}`}>
-                {status === 'IDLE' ? 'WAITING FOR INPUT' : stats.current}
+        {/* The Blur Effect Visual */}
+        <div className="text-center py-4 relative">
+            <div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">ATTEMPTING</div>
+            <div className={`text-2xl font-bold font-mono tracking-wider truncate ${status === 'CRACKED' ? 'text-green-400 scale-110' : 'text-slate-200 blur-[1px]'}`}>
+                {status === 'IDLE' ? 'WAITING...' : stats.current}
             </div>
+            {/* Binary Rain Background inside box */}
+            {status === 'RUNNING' && <div className="absolute inset-0 bg-green-500/5 pointer-events-none mix-blend-overlay animate-pulse"></div>}
         </div>
 
-        {/* Progress Bar (Visual only) */}
-        {status === 'RUNNING' && (
-            <div className="w-full bg-slate-900 h-1 mt-2">
-                <div 
-                    className="bg-red-600 h-full transition-all duration-75" 
-                    style={{ width: `${Math.min((stats.attempts / 20000) * 100, 100)}%` }}
-                ></div>
-            </div>
-        )}
+        <div className="flex justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-800">
+            <span>TOTAL TRIED: <span className="text-white">{stats.attempts.toLocaleString()}</span></span>
+            <span>ALGORITHM: <span className="text-cyan-500">HYBRID_DICT</span></span>
+        </div>
       </div>
 
       {status === 'CRACKED' && (
-         <div className="p-3 bg-green-900/20 border border-green-500/30 text-green-400 text-center text-xs animate-in zoom-in">
-            🔓 MATCH CONFIRMED: <span className="font-bold bg-green-950 px-2 py-1 rounded">{target}</span>
+         <div className="p-3 bg-green-900/20 border border-green-500/50 text-green-400 text-center text-xs animate-in zoom-in shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+            🔓 MATCH CONFIRMED: <span className="font-bold bg-green-950 px-2 py-1 rounded border border-green-500/30">{target}</span>
          </div>
       )}
-      
-      {status === 'FAILED' && (
-         <div className="p-3 bg-red-900/20 border border-red-500/30 text-red-400 text-center text-xs">
-            ❌ EXHAUSTED WORDLIST. TARGET SECURE.
-         </div>
-      )}
-
-      <p className="text-[10px] text-slate-600 text-center">
-        *Generates & tests ~50,000 combinations based on input seeds.
-      </p>
     </div>
   );
 }
