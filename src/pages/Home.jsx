@@ -5,7 +5,6 @@ import HeroSection from '@/components/portfolio/HeroSection';
 import QuoteSection from '@/components/portfolio/QuoteSection';
 import ProjectsSection from '@/components/portfolio/ProjectsSection';
 import TechStack from '@/components/portfolio/TechStack';
-import Certifications from '@/components/portfolio/Certifications';
 import ExperienceTimeline from '@/components/portfolio/ExperienceTimeline';
 import ApiShowcase from '@/components/portfolio/ApiShowcase';
 import MessageBoard from '@/components/portfolio/MessageBoard';
@@ -49,7 +48,6 @@ export default function Home() {
         <QuoteSection />
         <ProjectsSection />
         <TechStack />
-        <Certifications />
         <ExperienceTimeline />
         <ApiShowcase />
         <MessageBoard />
